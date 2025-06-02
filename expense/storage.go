@@ -1,0 +1,35 @@
+package expense
+
+type UserHome struct {
+	ExpenseWithUsers []Expense
+	AssociatedGroups []Group
+	User             User
+}
+
+type UserCreate struct {
+	Name     string
+	Email    string
+	Password string
+}
+
+type Storage interface {
+	FetchUserByEmail(email string) (*User, error)
+	CreateUser(UserCreate) (*User, error)
+	UpdateUser(User) (*User, error)
+	FetchGroupsByUser(userId string) ([]Group, error)
+	FetchUserById(id string) (*User, error)
+
+	FetchUsersInGroup(groupId string) ([]User, error)
+	FetchGroupById(id string) (*Group, error)
+	FetchGroupExpenses(groupId string, pageNumber int) ([]GroupExpenseHistory, error)
+	CreateOrUpdateGroup(group Group) (*Group, error)
+	AddUserInGroup(userId string, groupId string) (bool, error)
+	RemoveUserFromGroup(userId string, groupId string) (bool, error)
+
+	CreateOrUpdateExpense(expense ExpenseData) (*Expense, error)
+	FetchExpense(id string) (*ExpenseData, error)
+	CheckUserExistsInGroup(userId string, groupId string) (bool, error)
+	AttachExpenseToGroup(expenseId string, groupId string, users []string) (bool, error)
+	RemoveUserFromExpense(expenseId string, usersToRemove []string) (bool, error)
+	DeleteExpense(id string) (bool, error)
+}

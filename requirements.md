@@ -18,4 +18,13 @@
 
 ## User Interface 
 
-1. 
+1. Command Line interface
+2. HTTP APIs
+3. RPC
+
+## Storage Interface
+
+1. Local In memory Storage
+2. Persistent File Storage
+3. Relational Database
+4. KV DB/REDIS storage

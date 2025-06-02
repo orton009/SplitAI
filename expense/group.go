@@ -7,9 +7,17 @@ type ExpenseSummary struct {
 	Owed map[int](map[int]float64)
 }
 
+type GroupExpenseHistory struct {
+	Expenses   []Expense
+	PageNumber int
+	TotalPages int
+}
+
 type Group struct {
-	Users          []User
-	ExpenseHistory []Expense
+	Id          string
+	Name        string
+	Description string
+	Admin       string
 }
 
 func (g *Group) getExpenseSummary() ExpenseSummary {
