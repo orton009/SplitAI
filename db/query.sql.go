@@ -14,6 +14,25 @@ import (
 	"github.com/lib/pq"
 )
 
+const addFriend = `-- name: AddFriend :one
+INSERT INTO friends (user_id, friend_id) 
+VALUES ($1, $2)
+ON CONFLICT (user_id, friend_id) DO NOTHING
+RETURNING user_id, friend_id, created_at
+`
+
+type AddFriendParams struct {
+	UserID   uuid.UUID
+	FriendID uuid.UUID
+}
+
+func (q *Queries) AddFriend(ctx context.Context, arg AddFriendParams) (Friend, error) {
+	row := q.db.QueryRowContext(ctx, addFriend, arg.UserID, arg.FriendID)
+	var i Friend
+	err := row.Scan(&i.UserID, &i.FriendID, &i.CreatedAt)
+	return i, err
+}
+
 const addUserInGroup = `-- name: AddUserInGroup :one
 INSERT INTO group_members (user_id, group_id)
 VALUES ($1, $2)
@@ -311,7 +330,7 @@ func (q *Queries) FetchGroupsByUser(ctx context.Context, userID uuid.UUID) ([]Gr
 }
 
 const fetchUserByEmail = `-- name: FetchUserByEmail :one
-SELECT id, name, email, is_verified, password, created_at, updated_at FROM "user" WHERE email = $1
+SELECT id, name, email, is_verified, password, created_at, updated_at FROM "users" WHERE email = $1
 `
 
 func (q *Queries) FetchUserByEmail(ctx context.Context, email string) (User, error) {
@@ -330,7 +349,7 @@ func (q *Queries) FetchUserByEmail(ctx context.Context, email string) (User, err
 }
 
 const fetchUserById = `-- name: FetchUserById :one
-SELECT id, name, email, is_verified, password, created_at, updated_at FROM "user" WHERE id = $1 LIMIT 1
+SELECT id, name, email, is_verified, password, created_at, updated_at FROM "users" WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) FetchUserById(ctx context.Context, id uuid.UUID) (User, error) {
@@ -349,7 +368,7 @@ func (q *Queries) FetchUserById(ctx context.Context, id uuid.UUID) (User, error)
 }
 
 const fetchUsersInGroup = `-- name: FetchUsersInGroup :many
-SELECT u.id, u.name, u.email, u.is_verified, u.password, u.created_at, u.updated_at FROM "user" u
+SELECT u.id, u.name, u.email, u.is_verified, u.password, u.created_at, u.updated_at FROM "users" u
 JOIN group_members gm ON u.id = gm.user_id
 WHERE gm.group_id = $1
 `
@@ -385,8 +404,71 @@ func (q *Queries) FetchUsersInGroup(ctx context.Context, groupID uuid.UUID) ([]U
 	return items, nil
 }
 
+const getFriend = `-- name: GetFriend :one
+SELECT u.id, u.name, u.email
+FROM users u
+JOIN friends f ON u.id = f.friend_id
+WHERE (f.user_id = $1 AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = $1)
+`
+
+type GetFriendParams struct {
+	UserID   uuid.UUID
+	FriendID uuid.UUID
+}
+
+type GetFriendRow struct {
+	ID    uuid.UUID
+	Name  string
+	Email string
+}
+
+func (q *Queries) GetFriend(ctx context.Context, arg GetFriendParams) (GetFriendRow, error) {
+	row := q.db.QueryRowContext(ctx, getFriend, arg.UserID, arg.FriendID)
+	var i GetFriendRow
+	err := row.Scan(&i.ID, &i.Name, &i.Email)
+	return i, err
+}
+
+const getFriends = `-- name: GetFriends :many
+
+SELECT u.id, u.name, u.email 
+FROM users u 
+JOIN friends f ON u.id = f.friend_id 
+WHERE f.user_id = $1 OR f.friend_id = $1
+`
+
+type GetFriendsRow struct {
+	ID    uuid.UUID
+	Name  string
+	Email string
+}
+
+// Remove friendship in both directions
+func (q *Queries) GetFriends(ctx context.Context, userID uuid.UUID) ([]GetFriendsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getFriends, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFriendsRow
+	for rows.Next() {
+		var i GetFriendsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertUser = `-- name: InsertUser :one
-INSERT INTO "user" (id, name, email, is_verified, password, created_at, updated_at)
+INSERT INTO "users" (id, name, email, is_verified, password, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, name, email, is_verified, password, created_at, updated_at
 `
@@ -422,6 +504,25 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const removeFriend = `-- name: RemoveFriend :one
+DELETE FROM friends 
+WHERE (user_id = $1 AND friend_id = $2) 
+   OR (user_id = $1 AND friend_id = $2)
+   RETURNING TRUE
+`
+
+type RemoveFriendParams struct {
+	UserID   uuid.UUID
+	FriendID uuid.UUID
+}
+
+func (q *Queries) RemoveFriend(ctx context.Context, arg RemoveFriendParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, removeFriend, arg.UserID, arg.FriendID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const removeUserFromExpense = `-- name: RemoveUserFromExpense :one
@@ -461,7 +562,7 @@ func (q *Queries) RemoveUserFromGroup(ctx context.Context, arg RemoveUserFromGro
 }
 
 const updateUser = `-- name: UpdateUser :one
-UPDATE "user"
+UPDATE "users"
 SET name = $2, email = $3, is_verified = $4, password = $5, updated_at = NOW() AT TIME ZONE 'Asia/Kolkata'
 WHERE id = $1
 RETURNING id, name, email, is_verified, password, created_at, updated_at

@@ -11,7 +11,6 @@ type UserHome struct {
 	TotalBorrowed    float64
 	// Friends          []expense.User
 }
-
 type Service interface {
 	GetUserService() *UserService
 	GetExpenseService() *ExpenseService
@@ -20,16 +19,21 @@ type Service interface {
 type UserService interface {
 	GetUser(id string) (*expense.User, error)
 	CreateUser(name string, email string, password string) (*expense.User, error)
+	AddFriend(userId string, friendId string) (bool, error)
+	GetFriends(userId string) ([]expense.User, error)
+	GetFriend(userId string, friendId string) (*expense.User, error)
 	JoinGroup(userId string, groupId string) (bool, error)
 	LeaveGroup(userId string, groupId string) (bool, error)
 	CreateGroup(userId string, name string, description string) (*expense.Group, error)
 	GetAssociatedGroups(userId string) ([]expense.Group, error)
+	Login(email string, password string) (*expense.User, error)
+	GetAssociatedUsers(groupId string) (*AssociatedUsers, error)
 }
 
 type ExpenseService interface {
 	CreateExpense(userId string, expense expense.ExpenseCreate) (*expense.Expense, error)
 	UpdateExpense(userId string, expense expense.Expense) (*expense.Expense, error)
 	DeleteExpense(userId string, expenseId string) (bool, error)
-	SettleExpense(userId string, expenseId string) (bool, error)
+	SettleExpense(userId string, expenseId string) (*expense.Expense, error)
 	// GetExpenseHistory(id string) (*expense.ExpenseHistory, error)
 }

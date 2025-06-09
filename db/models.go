@@ -30,6 +30,12 @@ type ExpenseMapping struct {
 	UserID    uuid.UUID
 }
 
+type Friend struct {
+	UserID    uuid.UUID
+	FriendID  uuid.UUID
+	CreatedAt sql.NullTime
+}
+
 type Group struct {
 	ID          uuid.UUID
 	Name        string

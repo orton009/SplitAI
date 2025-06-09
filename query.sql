@@ -1,19 +1,19 @@
 -- name: FetchUserByEmail :one
-SELECT * FROM "user" WHERE email = $1;
+SELECT * FROM "users" WHERE email = $1;
 
 -- name: InsertUser :one
-INSERT INTO "user" (id, name, email, is_verified, password, created_at, updated_at)
+INSERT INTO "users" (id, name, email, is_verified, password, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: UpdateUser :one
-UPDATE "user"
+UPDATE "users"
 SET name = $2, email = $3, is_verified = $4, password = $5, updated_at = NOW() AT TIME ZONE 'Asia/Kolkata'
 WHERE id = $1
 RETURNING *;
 
 -- name: FetchUserById :one
-SELECT * FROM "user" WHERE id = $1 LIMIT 1;
+SELECT * FROM "users" WHERE id = $1 LIMIT 1;
 
 -- name: FetchGroupsByUser :many
 SELECT g.* FROM "group" g
@@ -21,7 +21,7 @@ JOIN group_members gm ON g.id = gm.group_id
 WHERE gm.user_id = $1;
 
 -- name: FetchUsersInGroup :many
-SELECT u.* FROM "user" u
+SELECT u.* FROM "users" u
 JOIN group_members gm ON u.id = gm.user_id
 WHERE gm.group_id = $1;
 
@@ -94,3 +94,26 @@ DELETE FROM expense_mapping
 WHERE expense_id = $1 AND user_id = ANY($2::uuid[])
 RETURNING TRUE;
 
+-- name: AddFriend :one 
+INSERT INTO friends (user_id, friend_id) 
+VALUES ($1, $2)
+ON CONFLICT (user_id, friend_id) DO NOTHING
+RETURNING *; 
+
+-- name: RemoveFriend :one 
+DELETE FROM friends 
+WHERE (user_id = $1 AND friend_id = $2) 
+   OR (user_id = $1 AND friend_id = $2)
+   RETURNING TRUE;  -- Remove friendship in both directions
+
+-- name: GetFriends :many
+SELECT u.id, u.name, u.email 
+FROM users u 
+JOIN friends f ON u.id = f.friend_id 
+WHERE f.user_id = $1 OR f.friend_id = $1;
+
+-- name: GetFriend :one
+SELECT u.id, u.name, u.email
+FROM users u
+JOIN friends f ON u.id = f.friend_id
+WHERE (f.user_id = $1 AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = $1);

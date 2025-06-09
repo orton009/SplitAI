@@ -4,6 +4,8 @@ import (
 	"errors"
 	"splitExpense/expense"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type ExpenseServiceImpl struct {
@@ -28,31 +30,47 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 		return nil, err
 	}
 
-	splitW := expense.SplitWrapper{Split: expenseCreate.Split}
-	splitJson, err := splitW.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-
-	payerW := expense.PayerWrapper{Payer: expenseCreate.Payee}
-	payeeJson, err := payerW.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-
-	return e.storage.CreateOrUpdateExpense(expense.ExpenseData{
+	exp := expense.Expense{
+		ID:          uuid.New().String(),
 		Description: expenseCreate.Description,
-		Split:       string(splitJson),
+		Split:       expenseCreate.Split,
 		CreatedAt:   time.Now(),
-		Payee:       string(payeeJson),
+		Payee:       expenseCreate.Payee,
 		Amount:      expenseCreate.Amount,
 		Status:      expense.ExpenseDraft,
-	})
+	}
+
+	expData, err := expense.ConvertExpenseToExpenseData(&exp)
+	if err != nil {
+		return nil, err
+	}
+	expData, err = e.storage.CreateOrUpdateExpense(*expData)
+	if err != nil {
+		return nil, err
+	}
+	return expense.ConvertExpenseDataToExpense(expData)
 }
 
-func (e *ExpenseServiceImpl) UpdateExpense(userId string, expense expense.Expense) (*expense.Expense, error) {
-	// TODO: IMPL, add/remove users from expense
-	return nil, nil
+func (e *ExpenseServiceImpl) UpdateExpense(userId string, exp expense.Expense) (*expense.Expense, error) {
+	expense_, err := e.storage.FetchExpense(exp.ID)
+	if err != nil {
+		return nil, errors.Join(errors.New("expense doesn't exist"), err)
+	}
+	if exp.CreatedAt.IsZero() {
+		exp.CreatedAt = time.Now()
+	}
+	if expense_.CreatedAt != exp.CreatedAt {
+		return nil, errors.New("cannot change createdAt field")
+	}
+	expData, err := expense.ConvertExpenseToExpenseData(&exp)
+	if err != nil {
+		return nil, err
+	}
+	expenseData, err := e.storage.CreateOrUpdateExpense(*expData)
+	if err != nil {
+		return nil, err
+	}
+	return expense.ConvertExpenseDataToExpense(expenseData)
 }
 
 func (e *ExpenseServiceImpl) DeleteExpense(userId string, expenseId string) (bool, error) {
@@ -65,5 +83,15 @@ func (e *ExpenseServiceImpl) SettleExpense(userId string, expenseId string) (*ex
 		return nil, err
 	}
 	expenseData.Status = expense.ExpenseSettled
-	return e.storage.CreateOrUpdateExpense(*expenseData)
+	updatedData, err := e.storage.CreateOrUpdateExpense(*expenseData)
+	if err != nil {
+		return nil, err
+	}
+	return expense.ConvertExpenseDataToExpense(updatedData)
+}
+
+func NewExpenseServiceImpl(storage expense.Storage) *ExpenseServiceImpl {
+	return &ExpenseServiceImpl{
+		storage: storage,
+	}
 }

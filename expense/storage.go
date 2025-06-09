@@ -14,10 +14,15 @@ type UserCreate struct {
 
 type Storage interface {
 	FetchUserByEmail(email string) (*User, error)
-	CreateUser(UserCreate) (*User, error)
+	CreateUser(User) (*User, error)
 	UpdateUser(User) (*User, error)
 	FetchGroupsByUser(userId string) ([]Group, error)
 	FetchUserById(id string) (*User, error)
+
+	AddFriend(userId string, friendId string) (bool, error)
+	GetFriend(userId string, friendId string) (*User, error)
+	GetFriends(userId string) ([]User, error)
+	RemoveFriend(userId string, friendId string) (bool, error)
 
 	FetchUsersInGroup(groupId string) ([]User, error)
 	FetchGroupById(id string) (*Group, error)
@@ -26,7 +31,7 @@ type Storage interface {
 	AddUserInGroup(userId string, groupId string) (bool, error)
 	RemoveUserFromGroup(userId string, groupId string) (bool, error)
 
-	CreateOrUpdateExpense(expense ExpenseData) (*Expense, error)
+	CreateOrUpdateExpense(expense ExpenseData) (*ExpenseData, error)
 	FetchExpense(id string) (*ExpenseData, error)
 	CheckUserExistsInGroup(userId string, groupId string) (bool, error)
 	AttachExpenseToGroup(expenseId string, groupId string, users []string) (bool, error)

@@ -151,3 +151,51 @@ type ExpenseData struct {
 	SettledBy   string
 	CreatedBy   string
 }
+
+func ConvertExpenseToExpenseData(e *Expense) (*ExpenseData, error) {
+	pw := PayerWrapper{Payer: e.Payee}
+	payeeW, err := json.Marshal(pw)
+	if err != nil {
+		return nil, err
+	}
+	sw := SplitWrapper{Split: e.Split}
+	splitW, err := json.Marshal(sw)
+	if err != nil {
+		return nil, err
+	}
+	return &ExpenseData{
+		ID:          e.ID,
+		Description: e.Description,
+		Amount:      e.Amount,
+		CreatedAt:   e.CreatedAt,
+		Payee:       string(payeeW),
+		Split:       string(splitW),
+		CreatedBy:   e.CreatedBy,
+		SettledBy:   e.SettledBy,
+		Status:      e.Status,
+	}, nil
+}
+
+func ConvertExpenseDataToExpense(e *ExpenseData) (*Expense, error) {
+	// Unmarshal Payee
+	var pw PayerWrapper
+	if err := json.Unmarshal([]byte(e.Payee), &pw); err != nil {
+		return nil, err
+	}
+	// Unmarshal Split
+	var sw SplitWrapper
+	if err := json.Unmarshal([]byte(e.Split), &sw); err != nil {
+		return nil, err
+	}
+	return &Expense{
+		ID:          e.ID,
+		Description: e.Description,
+		Amount:      e.Amount,
+		CreatedAt:   e.CreatedAt,
+		Payee:       pw.Payer,
+		Split:       sw.Split,
+		Status:      e.Status,
+		CreatedBy:   e.CreatedBy,
+		SettledBy:   e.SettledBy,
+	}, nil
+}

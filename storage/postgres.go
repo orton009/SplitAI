@@ -9,6 +9,7 @@ import (
 
 	"splitExpense/config"
 	"splitExpense/db"
+	"splitExpense/expense"
 	models "splitExpense/expense"
 
 	"strconv"
@@ -67,14 +68,17 @@ func (d *DBStorage) FetchUserByEmail(email string) (*models.User, error) {
 	}, nil
 }
 
-func (d *DBStorage) CreateUser(u models.UserCreate) (*models.User, error) {
-	id := uuid.New()
+func (d *DBStorage) CreateUser(u models.User) (*models.User, error) {
+	userUUID, err := uuid.Parse(u.ID)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	user, err := d.queries.InsertUser(*d.ctx, db.InsertUserParams{
-		ID:         id,
+		ID:         userUUID,
 		Name:       u.Name,
 		Email:      u.Email,
-		IsVerified: false,
+		IsVerified: u.IsVerified,
 		Password:   u.Password,
 		CreatedAt:  sql.NullTime{Time: now, Valid: true},
 		UpdatedAt:  sql.NullTime{Time: now, Valid: true},
@@ -268,13 +272,20 @@ func (d *DBStorage) RemoveUserFromGroup(userId string, groupId string) (bool, er
 }
 
 func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.ExpenseData, error) {
-	id := uuid.New()
 	createdBy, _ := uuid.Parse(expense.CreatedBy)
 	settledBy, _ := uuid.Parse(expense.SettledBy)
 	now := time.Now()
 	amountStr := fmt.Sprintf("%f", expense.Amount)
+	var createdAt time.Time
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+	parsed, err := uuid.Parse(expense.ID)
+	if err != nil {
+		return nil, err
+	}
 	e, err := d.queries.CreateOrUpdateExpense(*d.ctx, db.CreateOrUpdateExpenseParams{
-		ID:          id,
+		ID:          parsed,
 		Description: sql.NullString{String: expense.Description, Valid: true},
 		Amount:      amountStr,
 		Split:       json.RawMessage(expense.Split),
@@ -282,7 +293,7 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.E
 		SettledBy:   uuid.NullUUID{UUID: settledBy, Valid: expense.SettledBy != ""},
 		CreatedBy:   uuid.NullUUID{UUID: createdBy, Valid: expense.CreatedBy != ""},
 		Payee:       json.RawMessage(expense.Payee),
-		CreatedAt:   sql.NullTime{Time: now, Valid: true},
+		CreatedAt:   sql.NullTime{Time: createdAt, Valid: true},
 		UpdatedAt:   sql.NullTime{Time: now, Valid: true},
 	})
 	if err != nil {
@@ -311,8 +322,11 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.E
 }
 
 func (d *DBStorage) FetchExpense(id string) (*models.ExpenseData, error) {
-	uuidId, _ := uuid.Parse(id)
-	e, err := d.queries.FetchExpense(*d.ctx, uuidId)
+	expenseUUID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, err
+	}
+	e, err := d.queries.FetchExpense(*d.ctx, expenseUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -368,6 +382,71 @@ func (d *DBStorage) RemoveUserFromExpense(expenseId string, usersToRemove []stri
 }
 
 func (d *DBStorage) DeleteExpense(id string) (bool, error) {
-	eid, _ := uuid.Parse(id)
-	return d.queries.DeleteExpense(*d.ctx, eid)
+	expenseId, err := uuid.Parse(id)
+	if err != nil {
+		return false, err
+	}
+	return d.queries.DeleteExpense(*d.ctx, expenseId)
+}
+
+func (d *DBStorage) GetFriend(userId string, friendId string) (*expense.User, error) {
+	userUUID, err := uuid.Parse(userId)
+	if err != nil {
+		return nil, err
+	}
+	friendUUID, err := uuid.Parse(friendId)
+	if err != nil {
+		return nil, err
+	}
+	row, err := d.queries.GetFriend(*d.ctx, db.GetFriendParams{UserID: userUUID, FriendID: friendUUID})
+	if err != nil {
+		return nil, err
+	}
+	return &expense.User{Name: row.Name, Email: row.Email, ID: row.ID.String()}, nil
+
+}
+
+func (d *DBStorage) GetFriends(userId string) ([]expense.User, error) {
+	parsed, err := uuid.Parse(userId)
+	if err != nil {
+		return []expense.User{}, err
+	}
+	rows, err := d.queries.GetFriends(*d.ctx, parsed)
+	if err != nil {
+		return []expense.User{}, err
+	}
+	result := []expense.User{}
+	for _, row := range rows {
+		result = append(result, expense.User{Name: row.Name, Email: row.Email, ID: row.ID.String()})
+	}
+
+	return result, nil
+}
+
+func (d *DBStorage) RemoveFriend(userId string, friendId string) (bool, error) {
+	parsedUserID, err := uuid.Parse(userId)
+	if err != nil {
+		return false, err
+	}
+	friendUUID, err := uuid.Parse(friendId)
+	if err != nil {
+		return false, err
+	}
+	return d.queries.RemoveFriend(*d.ctx, db.RemoveFriendParams{UserID: parsedUserID, FriendID: friendUUID})
+}
+
+func (d *DBStorage) AddFriend(userId string, friendId string) (bool, error) {
+	userUUID, err := uuid.Parse(userId)
+	if err != nil {
+		return false, err
+	}
+	friendUUID, err := uuid.Parse(friendId)
+	if err != nil {
+		return false, err
+	}
+	_, err = d.queries.AddFriend(*d.ctx, db.AddFriendParams{UserID: userUUID, FriendID: friendUUID})
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

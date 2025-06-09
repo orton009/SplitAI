@@ -6,6 +6,8 @@ import (
 	"errors"
 	"splitExpense/config"
 	expense "splitExpense/expense"
+
+	"github.com/google/uuid"
 )
 
 type UserServiceImpl struct {
@@ -32,10 +34,12 @@ func (u *UserServiceImpl) CreateUser(name string, email string, password string)
 	hasher.Write([]byte(password))
 	passwordHash := hasher.Sum(nil)
 
-	user, err := u.storage.CreateUser(expense.UserCreate{
-		Name:     name,
-		Password: base64.StdEncoding.EncodeToString(passwordHash),
-		Email:    email,
+	user, err := u.storage.CreateUser(expense.User{
+		ID:         uuid.New().String(),
+		Name:       name,
+		Password:   base64.StdEncoding.EncodeToString(passwordHash),
+		Email:      email,
+		IsVerified: false,
 	})
 
 	return user, err
@@ -79,4 +83,64 @@ func (u *UserServiceImpl) CreateGroup(userId string, name string, description st
 
 func (u *UserServiceImpl) GetAssociatedGroups(userId string) ([]expense.Group, error) {
 	return u.storage.FetchGroupsByUser(userId)
+}
+
+func (u *UserServiceImpl) Login(email string, password string) (*expense.User, error) {
+	existingUser, err := u.storage.FetchUserByEmail(email)
+	if err != nil {
+		return nil, err
+	}
+	if existingUser == nil {
+		return nil, errors.New("user does not exist")
+	}
+	hasher := crypto.SHA256.New()
+	hasher.Write([]byte(password))
+	passwordHash := hasher.Sum(nil)
+	if existingUser.Password != base64.StdEncoding.EncodeToString(passwordHash) {
+		return nil, errors.New("invalid password")
+	}
+	return existingUser, nil
+}
+
+func NewUserServiceImpl(cfg *config.Config, storage expense.Storage) *UserServiceImpl {
+	return &UserServiceImpl{
+		config:  cfg,
+		storage: storage,
+	}
+}
+
+type AssociatedUsers struct {
+	group expense.Group
+	users []expense.User
+}
+
+func (u *UserServiceImpl) GetAssociatedUsers(groupId string) (*AssociatedUsers, error) {
+	group, err := u.storage.FetchGroupById(groupId)
+	if err != nil {
+		return nil, err
+	}
+
+	users, err := u.storage.FetchUsersInGroup(groupId)
+	return &AssociatedUsers{
+		group: *group,
+		users: users,
+	}, nil
+}
+
+// AddFriend implements the UserService interface
+func (us *UserServiceImpl) AddFriend(userId string, friendId string) (bool, error) {
+
+	return us.storage.AddFriend(userId, friendId)
+}
+
+// GetFriends implements the UserService interface
+func (us *UserServiceImpl) GetFriends(userId string) ([]expense.User, error) {
+
+	return us.storage.GetFriends(userId)
+}
+
+// GetFriend implements the UserService interface
+func (us *UserServiceImpl) GetFriend(userId string, friendId string) (*expense.User, error) {
+
+	return us.storage.GetFriend(userId, friendId)
 }

@@ -1,7 +1,9 @@
 package main
 
-import "fmt"
+import (
+	apiServer "splitExpense/api"
+)
 
 func main() {
-	fmt.Println("Welcome to Split Expense Service")
+	apiServer.Start()
 }
