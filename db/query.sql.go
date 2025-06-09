@@ -33,6 +33,25 @@ func (q *Queries) AddFriend(ctx context.Context, arg AddFriendParams) (Friend, e
 	return i, err
 }
 
+const addUserExpenseMapping = `-- name: AddUserExpenseMapping :one
+INSERT INTO expense_mapping (expense_id, user_id)
+SELECT $1, $2 
+ON CONFLICT DO NOTHING
+RETURNING TRUE
+`
+
+type AddUserExpenseMappingParams struct {
+	ExpenseID uuid.UUID
+	UserID    uuid.UUID
+}
+
+func (q *Queries) AddUserExpenseMapping(ctx context.Context, arg AddUserExpenseMappingParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, addUserExpenseMapping, arg.ExpenseID, arg.UserID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const addUserInGroup = `-- name: AddUserInGroup :one
 INSERT INTO group_members (user_id, group_id)
 VALUES ($1, $2)
@@ -213,6 +232,17 @@ func (q *Queries) FetchExpense(ctx context.Context, id uuid.UUID) (Expense, erro
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const fetchExpenseAssociatedGroup = `-- name: FetchExpenseAssociatedGroup :one
+SELECT group_id FROM expense_mapping WHERE expense_id = $1 AND group_id != NULL LIMIT 1
+`
+
+func (q *Queries) FetchExpenseAssociatedGroup(ctx context.Context, expenseID uuid.UUID) (uuid.NullUUID, error) {
+	row := q.db.QueryRowContext(ctx, fetchExpenseAssociatedGroup, expenseID)
+	var group_id uuid.NullUUID
+	err := row.Scan(&group_id)
+	return group_id, err
 }
 
 const fetchGroupById = `-- name: FetchGroupById :one

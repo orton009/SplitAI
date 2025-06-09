@@ -15,23 +15,37 @@ type User struct {
 }
 
 type Payer interface {
-	isPayer() bool
+	GetPayers() map[string]float64
+	GetTotal() float64
 }
 
 type SinglePayer struct {
-	Payer string `json:"payer"`
+	payer  string  `json:"payer"`
+	amount float64 `json:"amount"`
 }
 
 type MultiPayer struct {
-	Payers []string `json:"payers"`
+	payers map[string]float64 `json:"payers"`
 }
 
-func (m *MultiPayer) isPayer() bool {
-	return true
+func (m *MultiPayer) GetPayers() map[string]float64 {
+	return m.payers
 }
 
-func (u *SinglePayer) isPayer() bool {
-	return true
+func (m *MultiPayer) GetTotal() float64 {
+	var total float64
+	for _, amount := range m.payers {
+		total += amount
+	}
+	return total
+}
+
+func (u *SinglePayer) GetPayers() map[string]float64 {
+	return map[string]float64{u.payer: u.amount}
+}
+
+func (u *SinglePayer) GetTotal() float64 {
+	return u.amount
 }
 
 // PayerWrapper handles JSON marshaling/unmarshaling of Payer interface

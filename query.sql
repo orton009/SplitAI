@@ -65,6 +65,9 @@ RETURNING *;
 -- name: FetchExpense :one
 SELECT * FROM expense WHERE id = $1 LIMIT 1;
 
+-- name: FetchExpenseAssociatedGroup :one
+SELECT group_id FROM expense_mapping WHERE expense_id = $1 AND group_id != NULL LIMIT 1;
+
 -- name: DeleteExpense :one
 DELETE FROM expense WHERE id = $1 RETURNING TRUE;
 
@@ -86,6 +89,12 @@ SELECT EXISTS(
 -- name: AttachExpenseToGroup :one
 INSERT INTO expense_mapping (expense_id, group_id, user_id)
 SELECT $1, $2, unnest($3::uuid[])
+ON CONFLICT DO NOTHING
+RETURNING TRUE;
+
+-- name: AddUserExpenseMapping :one
+INSERT INTO expense_mapping (expense_id, user_id)
+SELECT $1, $2 
 ON CONFLICT DO NOTHING
 RETURNING TRUE;
 

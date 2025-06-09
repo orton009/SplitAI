@@ -353,6 +353,12 @@ func (d *DBStorage) CheckUserExistsInGroup(userId string, groupId string) (bool,
 	})
 }
 
+func (d *DBStorage) AddExpenseMapping(expenseId string, userId string) (bool, error) {
+	uid, _ := uuid.Parse(userId)
+	eid, _ := uuid.Parse(expenseId)
+	return d.queries.AddUserExpenseMapping(*d.ctx, db.AddUserExpenseMappingParams{ExpenseID: eid, UserID: uid})
+}
+
 func (d *DBStorage) AttachExpenseToGroup(expenseId string, groupId string, users []string) (bool, error) {
 	eid, _ := uuid.Parse(expenseId)
 	gid, _ := uuid.Parse(groupId)
@@ -449,4 +455,16 @@ func (d *DBStorage) AddFriend(userId string, friendId string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func (d *DBStorage) FetchExpenseAssociatedGroup(expenseId string) (bool, string, error) {
+	expenseUUID, err := uuid.Parse(expenseId)
+	if err != nil {
+		return false, "", err
+	}
+	gID, err := d.queries.FetchExpenseAssociatedGroup(*d.ctx, expenseUUID)
+	if err != nil && err != sql.ErrNoRows {
+		return false, "", err
+	}
+	return err != sql.ErrNoRows, gID.UUID.String(), nil
 }

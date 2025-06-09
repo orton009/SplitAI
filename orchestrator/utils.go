@@ -64,3 +64,19 @@ func (v *validator) UUID(id string) (*validator, *uuid.UUID) {
 	}
 	return v, &parsed
 }
+
+func (v *validator) NonEmptyID(id string) *validator {
+	ok := len(id) > 0
+	if !ok {
+		v.errors = append(v.errors, expense.ErrValidation("Emmpty ID"))
+	}
+	return v
+}
+
+func (v *validator) LeastAmount(amount float64) *validator {
+	ok := amount >= 1.0
+	if !ok {
+		v.errors = append(v.errors, expense.ErrValidation("Amount less than 1"))
+	}
+	return v
+}

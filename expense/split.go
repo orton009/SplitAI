@@ -6,21 +6,21 @@ import (
 )
 
 type Split interface {
-	computeTotal() float64
-	getPayeeSplit() map[int]float64
+	ComputeTotal() float64
+	GetPayeeSplit() map[string]float64
 }
 
 type EqualSplit struct {
-	Payee       []int   `json:"payee"`
-	TotalAmount float64 `json:"totalAmount"`
+	Payee       []string `json:"payee"`
+	TotalAmount float64  `json:"totalAmount"`
 }
 
-func (e *EqualSplit) computeTotal() float64 {
+func (e *EqualSplit) ComputeTotal() float64 {
 	return e.TotalAmount
 }
 
-func (e *EqualSplit) getPayeeSplit() map[int]float64 {
-	amountSplit := make(map[int]float64)
+func (e *EqualSplit) GetPayeeSplit() map[string]float64 {
+	amountSplit := make(map[string]float64)
 	amount := e.TotalAmount / float64(len(e.Payee))
 	for i := range e.Payee {
 		amountSplit[e.Payee[i]] = amount
@@ -38,10 +38,10 @@ func (e *EqualSplit) getPayeeSplit() map[int]float64 {
 // }
 
 type UnitSplit struct {
-	PayeeAmountSplit map[int]float64 `json:"payeeAmountSplit"`
+	PayeeAmountSplit map[string]float64 `json:"payeeAmountSplit"`
 }
 
-func (u *UnitSplit) computeTotal() float64 {
+func (u *UnitSplit) ComputeTotal() float64 {
 	var totalAmount float64
 	for _, amount := range u.PayeeAmountSplit {
 		totalAmount += amount
@@ -50,33 +50,24 @@ func (u *UnitSplit) computeTotal() float64 {
 	return totalAmount
 }
 
-func (u *UnitSplit) getPayeeSplit() map[int]float64 {
+func (u *UnitSplit) GetPayeeSplit() map[string]float64 {
 	return u.PayeeAmountSplit
 }
 
-// func (u *UnitSplit) MarshalJSON() ([]byte, error) {
-// 	type Alias UnitSplit
-// 	return json.Marshal(&struct {
-// 		*Alias
-// 	}{
-// 		Alias: (*Alias)(u),
-// 	})
-// }
-
 type PercentageSplit struct {
-	PercentageSplitMap map[int]float64 `json:"percentageSplitMap"`
-	TotalAmount        float64         `json:"totalAmount"`
+	PercentageSplitMap map[string]float64 `json:"percentageSplitMap"`
+	TotalAmount        float64            `json:"totalAmount"`
 }
 
-func (p *PercentageSplit) getPayeeSplit() map[int]float64 {
-	splitMap := map[int]float64{}
+func (p *PercentageSplit) GetPayeeSplit() map[string]float64 {
+	splitMap := map[string]float64{}
 	for userId, percent := range p.PercentageSplitMap {
 		splitMap[userId] = roundFloat((percent/100)*p.TotalAmount, 2)
 	}
 	return splitMap
 }
 
-func (p *PercentageSplit) computeTotal() float64 {
+func (p *PercentageSplit) ComputeTotal() float64 {
 	var totalPercent float64
 	for _, percent := range p.PercentageSplitMap {
 		totalPercent += percent
@@ -104,11 +95,11 @@ type Fraction struct {
 }
 
 type ShareSplit struct {
-	SplitMap    map[int]Fraction `json:"splitMap"`
-	TotalAmount float64          `json:"totalAmount"`
+	SplitMap    map[string]Fraction `json:"splitMap"`
+	TotalAmount float64             `json:"totalAmount"`
 }
 
-func (s *ShareSplit) computeTotal() float64 {
+func (s *ShareSplit) ComputeTotal() float64 {
 	var total float64
 	for _, fr := range s.SplitMap {
 		total += float64(fr.Numerator/fr.Denominator) * s.TotalAmount
@@ -117,8 +108,8 @@ func (s *ShareSplit) computeTotal() float64 {
 	return total
 }
 
-func (s *ShareSplit) getPayeeSplit() map[int]float64 {
-	splitDetail := map[int]float64{}
+func (s *ShareSplit) GetPayeeSplit() map[string]float64 {
+	splitDetail := map[string]float64{}
 
 	for uid, fr := range s.SplitMap {
 		splitDetail[uid] = float64(fr.Numerator/fr.Denominator) * s.TotalAmount

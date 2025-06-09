@@ -39,6 +39,11 @@ func (e *ExpenseAppImpl) UserSignup(name, email, password string) (*expense.User
 }
 
 func (e *ExpenseAppImpl) JoinGroup(userId, newMemberId, groupId string) (bool, *expense.AppError) {
+	validator := NewValidator().NonEmptyID(userId).NonEmptyID(newMemberId).NonEmptyID(groupId)
+	if !validator.Ok() {
+		return false, validator.Err()
+	}
+
 	_, err := e.userService.GetFriend(userId, newMemberId)
 	if err != nil {
 		return false, expense.ErrService(err.Error())
@@ -51,6 +56,11 @@ func (e *ExpenseAppImpl) JoinGroup(userId, newMemberId, groupId string) (bool, *
 }
 
 func (e *ExpenseAppImpl) LeaveGroup(userId, groupId string) (bool, *expense.AppError) {
+	validator := NewValidator().NonEmptyID(userId).NonEmptyID(groupId)
+	if !validator.Ok() {
+		return false, validator.Err()
+	}
+
 	ok, err := e.userService.LeaveGroup(userId, groupId)
 	if err != nil {
 		return false, expense.ErrService(err.Error())
@@ -60,14 +70,15 @@ func (e *ExpenseAppImpl) LeaveGroup(userId, groupId string) (bool, *expense.AppE
 }
 
 func (e *ExpenseAppImpl) CreateGroup(userId, name, description string) (*expense.Group, error) {
+	validator := NewValidator().NonEmptyID(userId).Name(name)
+	if !validator.Ok() {
+		return nil, validator.Err()
+	}
 	return e.userService.CreateGroup(userId, name, description)
 }
 
-// func (e *ExpenseAppImpl) GetAssociatedGroups(userId string) ([]expense.Group, error) {
-// 	return e.userService.GetAssociatedGroups(userId)
-// }
-
 func (e *ExpenseAppImpl) CreateExpense(userId string, exp expense.ExpenseCreate) (*expense.Expense, error) {
+	// validator := NewValidator().NonEmptyID(userId).LeastAmount(exp.Amount)
 	// TODO: check split details, validate that computeTotal() vs amount, check if all userId exist in DB
 	// TODO: check if all users are friends of current user.
 	return e.expenseService.CreateExpense(userId, exp)

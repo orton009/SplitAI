@@ -33,6 +33,7 @@ type Storage interface {
 
 	CreateOrUpdateExpense(expense ExpenseData) (*ExpenseData, error)
 	FetchExpense(id string) (*ExpenseData, error)
+	FetchExpenseAssociatedGroup(expenseId string) (ok bool, groupId string, err error)
 	CheckUserExistsInGroup(userId string, groupId string) (bool, error)
 	AttachExpenseToGroup(expenseId string, groupId string, users []string) (bool, error)
 	RemoveUserFromExpense(expenseId string, usersToRemove []string) (bool, error)
