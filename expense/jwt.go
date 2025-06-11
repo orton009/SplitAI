@@ -8,8 +8,8 @@ import (
 )
 
 var jwtSecret = []byte("your-secret-key") // TODO: move to config
-const TokenExpiry = time.Hour * 1
-const TokenRefreshWindow = time.Minute * 10
+const TokenExpiry = time.Hour * 12
+const TokenRefreshWindow = time.Minute * 60
 
 type Claims struct {
 	UserID     string `json:"user_id"`

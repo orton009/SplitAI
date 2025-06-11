@@ -58,6 +58,7 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 		Amount:      expenseCreate.Amount,
 		Status:      expense.ExpenseDraft,
 		GroupId:     groupID,
+		CreatedBy:   userId,
 	}
 
 	expData, err := expense.ConvertExpenseToExpenseData(&exp)
@@ -73,9 +74,12 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 
 	userIds := lodash.Union(lodash.Keys(payeeMap), lodash.Keys(expenseCreate.Payee.GetPayers()))
 
-	_, err = e.storage.AttachExpenseToGroup(exp.ID, exp.GroupId, userIds)
-	if err != nil {
-		return nil, err
+	if exp.IsGroupExpense {
+
+		_, err = e.storage.AttachExpenseToGroup(exp.ID, exp.GroupId, userIds)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// TODO: CLOSE LOCK
@@ -172,6 +176,29 @@ func (e *ExpenseServiceImpl) SettleExpense(userId string, expenseId string) (*ex
 		return nil, err
 	}
 	return expense.ConvertExpenseDataToExpense(updatedData)
+}
+
+func (e *ExpenseServiceImpl) FetchExpense(id string) (*expense.Expense, error) {
+
+	ok, gid, err := e.storage.FetchExpenseAssociatedGroup(id)
+	if err != nil {
+		return nil, err
+	}
+
+	expData, err := e.storage.FetchExpense(id)
+	if err != nil {
+		return nil, err
+	}
+
+	exp, err := expense.ConvertExpenseDataToExpense(expData)
+	if err != nil {
+		return nil, err
+	}
+
+	exp.IsGroupExpense = ok
+	exp.GroupId = gid
+
+	return exp, nil
 }
 
 func NewExpenseServiceImpl(storage expense.Storage) *ExpenseServiceImpl {

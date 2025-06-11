@@ -14,7 +14,7 @@ type signUpRequest struct {
 }
 
 type userSignUpHandler struct {
-	orchestrator *orchestrator.ExpenseAppImpl
+	orchestrator orchestrator.ExpenseAppImpl
 }
 
 func (u *userSignUpHandler) Method() Method {
@@ -25,6 +25,22 @@ func (u *userSignUpHandler) Path() string {
 	return Path("/user/signup")
 }
 
-func (u *userSignUpHandler) Handle(ctx *gin.Context, cfg *config.Config) {
+func (u *userSignUpHandler) Handle(c *gin.Context, cfg *config.Config) {
+	// decode and validation
+	var req signUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "invalid request"})
+		return
+	}
 
+	// orchestrator call
+	user, err := u.orchestrator.UserSignup(req.Name, req.Email, req.Password)
+	if err != nil {
+		c.AbortWithError(500, err)
+		c.JSON(500, gin.H{"error": "could not create user"})
+		return
+	}
+
+	// response
+	c.JSON(201, user)
 }

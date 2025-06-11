@@ -28,15 +28,6 @@ func (e *EqualSplit) GetPayeeSplit() map[string]float64 {
 	return amountSplit
 }
 
-// func (e *EqualSplit) MarshalJSON() ([]byte, error) {
-// 	type Alias EqualSplit
-// 	return json.Marshal(&struct {
-// 		*Alias
-// 	}{
-// 		Alias: (*Alias)(e),
-// 	})
-// }
-
 type UnitSplit struct {
 	PayeeAmountSplit map[string]float64 `json:"payeeAmountSplit"`
 }
@@ -80,15 +71,6 @@ func (p *PercentageSplit) ComputeTotal() float64 {
 	}
 }
 
-// func (p *PercentageSplit) MarshalJSON() ([]byte, error) {
-// 	type Alias PercentageSplit
-// 	return json.Marshal(&struct {
-// 		*Alias
-// 	}{
-// 		Alias: (*Alias)(p),
-// 	})
-// }
-
 type Fraction struct {
 	Numerator   int `json:"numerator"`
 	Denominator int `json:"denominator"`
@@ -117,15 +99,6 @@ func (s *ShareSplit) GetPayeeSplit() map[string]float64 {
 
 	return splitDetail
 }
-
-// func (s *ShareSplit) MarshalJSON() ([]byte, error) {
-// 	type Alias ShareSplit
-// 	return json.Marshal(&struct {
-// 		*Alias
-// 	}{
-// 		Alias: (*Alias)(s),
-// 	})
-// }
 
 // SplitWrapper handles JSON marshaling/unmarshaling of Split interface
 type SplitWrapper struct {

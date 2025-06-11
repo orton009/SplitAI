@@ -2,6 +2,7 @@ package service
 
 import (
 	"crypto"
+	"database/sql"
 	"encoding/base64"
 	"errors"
 	"splitExpense/config"
@@ -23,7 +24,7 @@ func (u *UserServiceImpl) GetUser(id string) (*expense.User, error) {
 func (u *UserServiceImpl) CreateUser(name string, email string, password string) (*expense.User, error) {
 
 	existingUser, err := u.storage.FetchUserByEmail(email)
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
 	if existingUser != nil {
@@ -41,6 +42,7 @@ func (u *UserServiceImpl) CreateUser(name string, email string, password string)
 		Email:      email,
 		IsVerified: false,
 	})
+	user.Password = ""
 
 	return user, err
 }
@@ -85,21 +87,8 @@ func (u *UserServiceImpl) GetAssociatedGroups(userId string) ([]expense.Group, e
 	return u.storage.FetchGroupsByUser(userId)
 }
 
-func (u *UserServiceImpl) Login(email string, password string) (*expense.User, error) {
-	existingUser, err := u.storage.FetchUserByEmail(email)
-	if err != nil {
-		return nil, err
-	}
-	if existingUser == nil {
-		return nil, errors.New("user does not exist")
-	}
-	hasher := crypto.SHA256.New()
-	hasher.Write([]byte(password))
-	passwordHash := hasher.Sum(nil)
-	if existingUser.Password != base64.StdEncoding.EncodeToString(passwordHash) {
-		return nil, errors.New("invalid password")
-	}
-	return existingUser, nil
+func (u *UserServiceImpl) FetchUserCredentials(email string) (*expense.User, error) {
+	return u.storage.FetchUserByEmail(email)
 }
 
 func NewUserServiceImpl(cfg *config.Config, storage expense.Storage) *UserServiceImpl {
@@ -110,8 +99,8 @@ func NewUserServiceImpl(cfg *config.Config, storage expense.Storage) *UserServic
 }
 
 type AssociatedUsers struct {
-	group expense.Group
-	users []expense.User
+	Group expense.Group
+	Users []expense.User
 }
 
 func (u *UserServiceImpl) GetAssociatedUsers(groupId string) (*AssociatedUsers, error) {
@@ -122,8 +111,8 @@ func (u *UserServiceImpl) GetAssociatedUsers(groupId string) (*AssociatedUsers, 
 
 	users, err := u.storage.FetchUsersInGroup(groupId)
 	return &AssociatedUsers{
-		group: *group,
-		users: users,
+		Group: *group,
+		Users: users,
 	}, nil
 }
 

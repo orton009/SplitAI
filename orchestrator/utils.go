@@ -38,10 +38,15 @@ func (v *validator) Email(e string) *validator {
 	return v
 }
 
-func (v *validator) Password(p string) *validator {
-	const passwordRegex = `^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+[\]{};':"\\|,.<>?]).{8,}$`
-	re := regexp.MustCompile(passwordRegex)
-	ok := re.MatchString(p)
+func (v *validator) Password(password string) *validator {
+
+	hasLower := regexp.MustCompile(`[a-z]`).MatchString(password)
+	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(password)
+	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(password)
+	hasSpecial := regexp.MustCompile(`[!@#\$%\^&\*\(\)_\+\-=\[\]{};':"\\|,.<>\/?]`).MatchString(password)
+
+	ok := len(password) > 8 && hasLower && hasUpper && hasNumber && hasSpecial
+
 	if !ok {
 		v.errors = append(v.errors, expense.ErrValidation("Invalid Password, password should contain atleast one uppercase, one lowercase, one special character and one digit"))
 	}

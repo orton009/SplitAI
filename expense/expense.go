@@ -20,32 +20,32 @@ type Payer interface {
 }
 
 type SinglePayer struct {
-	payer  string  `json:"payer"`
-	amount float64 `json:"amount"`
+	Payer  string  `json:"payer"`
+	Amount float64 `json:"amount"`
 }
 
 type MultiPayer struct {
-	payers map[string]float64 `json:"payers"`
+	Payers map[string]float64 `json:"payers"`
 }
 
 func (m *MultiPayer) GetPayers() map[string]float64 {
-	return m.payers
+	return m.Payers
 }
 
 func (m *MultiPayer) GetTotal() float64 {
 	var total float64
-	for _, amount := range m.payers {
+	for _, amount := range m.Payers {
 		total += amount
 	}
 	return total
 }
 
 func (u *SinglePayer) GetPayers() map[string]float64 {
-	return map[string]float64{u.payer: u.amount}
+	return map[string]float64{u.Payer: u.Amount}
 }
 
 func (u *SinglePayer) GetTotal() float64 {
-	return u.amount
+	return u.Amount
 }
 
 // PayerWrapper handles JSON marshaling/unmarshaling of Payer interface

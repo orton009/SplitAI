@@ -6,6 +6,8 @@ import (
 	"splitExpense/orchestrator"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func Start() {
@@ -15,13 +17,15 @@ func Start() {
 	})
 	r := gin.Default(opts)
 
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	cfg := &config.Config{
 		// Fill with actual config values or load from env
 		DatabaseHost:     "localhost",
 		DatabasePort:     "5432",
 		DatabaseUser:     "postgres",
-		DatabasePassword: "password",
-		DatabaseName:     "splitexpense",
+		DatabasePassword: "postgres",
+		DatabaseName:     "postgres",
 		DatabaseSSLMode:  "disable",
 		Environment:      config.EnvironmentDevelopment,
 	}
@@ -32,7 +36,7 @@ func Start() {
 
 	attachRoutes(r, app, cfg)
 
-	r.Run()
+	r.Run(":8888")
 }
 
 type Method string
@@ -51,29 +55,66 @@ type RouteHandler interface {
 	Handle(g *gin.Context, c *config.Config)
 }
 
+type ApiHandler struct {
+	handle       RouteHandler
+	PreHandlers  []gin.HandlerFunc
+	PostHandlers []gin.HandlerFunc
+}
+
+func routeMap(o orchestrator.ExpenseAppImpl) []ApiHandler {
+	return []ApiHandler{
+		{
+			handle: &LoginRouteHandler{orchestrator: o},
+		},
+		{
+			handle: &userSignUpHandler{orchestrator: o},
+		},
+		// {
+		// 	handle:      &DeleteExpenseRouteHandler{orchestrator: o},
+		// 	PreHandlers: []gin.HandlerFunc{Authenticate},
+		// },
+		// {
+		// 	handle:      &CreateGroupRouteHandler{orchestrator: o},
+		// 	PreHandlers: []gin.HandlerFunc{Authenticate},
+		// },
+		{
+			handle:      &CreateOrUpdateExpenseRouteHandler{orchestrator: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
+		// {
+		// 	handle:      &SettleExpenseHandler{orchestrator: o},
+		// 	PreHandlers: []gin.HandlerFunc{Authenticate},
+		// },
+	}
+}
+
 func attachRoutes(g *gin.Engine, orchestrator orchestrator.ExpenseAppImpl, cfg *config.Config) {
-	handlers := []RouteHandler{
-		&LoginRouteHandler{orchestrator: orchestrator},
-		// Add more handlers here
-	}
-	validateAndHandle := func(h RouteHandler) gin.HandlerFunc {
-		return func(c *gin.Context) {
-			h.Handle(c, cfg)
-		}
-	}
+
+	handlers := routeMap(orchestrator)
 
 	for _, h := range handlers {
-		switch h.Method() {
+
+		routeHandler := func(r RouteHandler) gin.HandlerFunc {
+			return func(c *gin.Context) {
+				r.Handle(c, cfg)
+			}
+		}
+		handlers := []gin.HandlerFunc{}
+		handlers = append(handlers, h.PreHandlers...)
+		handlers = append(handlers, routeHandler(h.handle))
+		handlers = append(handlers, h.PostHandlers...)
+
+		switch h.handle.Method() {
 		case GET:
-			g.GET(h.Path(), validateAndHandle(h))
+			g.GET(h.handle.Path(), handlers...)
 		case POST:
-			g.POST(h.Path(), validateAndHandle(h))
+			g.POST(h.handle.Path(), handlers...)
 		case PUT:
-			g.PUT(h.Path(), validateAndHandle(h))
+			g.PUT(h.handle.Path(), handlers...)
 		case DELETE:
-			g.DELETE(h.Path(), validateAndHandle(h))
+			g.DELETE(h.handle.Path(), handlers...)
 		case HEAD:
-			g.HEAD(h.Path(), validateAndHandle(h))
+			g.HEAD(h.handle.Path(), handlers...)
 		}
 	}
 }

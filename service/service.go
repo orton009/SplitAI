@@ -26,11 +26,12 @@ type UserService interface {
 	LeaveGroup(userId string, groupId string) (bool, error)
 	CreateGroup(userId string, name string, description string) (*expense.Group, error)
 	GetAssociatedGroups(userId string) ([]expense.Group, error)
-	Login(email string, password string) (*expense.User, error)
+	FetchUserCredentials(email string) (*expense.User, error)
 	GetAssociatedUsers(groupId string) (*AssociatedUsers, error)
 }
 
 type ExpenseService interface {
+	FetchExpense(id string) (*expense.Expense, error)
 	CreateExpense(userId string, expense expense.ExpenseCreate) (*expense.Expense, error)
 	UpdateExpense(userId string, expense expense.Expense) (*expense.Expense, error)
 	DeleteExpense(userId string, expenseId string) (bool, error)

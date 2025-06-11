@@ -272,10 +272,20 @@ func (d *DBStorage) RemoveUserFromGroup(userId string, groupId string) (bool, er
 }
 
 func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.ExpenseData, error) {
-	createdBy, _ := uuid.Parse(expense.CreatedBy)
-	settledBy, _ := uuid.Parse(expense.SettledBy)
+
+	var err error
+
+	var settledBy uuid.UUID
+	createdBy, err := uuid.Parse(expense.CreatedBy)
+	if expense.SettledBy != "" {
+		settledBy, err = uuid.Parse(expense.SettledBy)
+	}
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	amountStr := fmt.Sprintf("%f", expense.Amount)
+
 	var createdAt time.Time
 	if createdAt.IsZero() {
 		createdAt = time.Now()
@@ -284,6 +294,7 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.E
 	if err != nil {
 		return nil, err
 	}
+
 	e, err := d.queries.CreateOrUpdateExpense(*d.ctx, db.CreateOrUpdateExpenseParams{
 		ID:          parsed,
 		Description: sql.NullString{String: expense.Description, Valid: true},
@@ -308,13 +319,19 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.E
 	if err != nil {
 		return nil, err
 	}
+
+	var settledBy_ string
+	if e.SettledBy.Valid {
+		settledBy_ = e.SettledBy.UUID.String()
+	}
+
 	return &models.ExpenseData{
 		ID:          e.ID.String(),
 		Description: e.Description.String,
 		Amount:      amount,
 		Status:      models.ExpenseStatus(e.Status),
 		CreatedBy:   e.CreatedBy.UUID.String(),
-		SettledBy:   e.SettledBy.UUID.String(),
+		SettledBy:   settledBy_,
 		CreatedAt:   e.CreatedAt.Time,
 		Payee:       string(payeeW),
 		Split:       string(splitW),
