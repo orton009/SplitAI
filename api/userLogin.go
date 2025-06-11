@@ -1,7 +1,6 @@
 package apiServer
 
 import (
-	"fmt"
 	"path/filepath"
 	"splitExpense/config"
 	"splitExpense/expense"
@@ -38,7 +37,6 @@ func (h *LoginRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 	if err := c.ShouldBindBodyWithJSON(&req); err != nil {
 		c.AbortWithError(400, err)
 	}
-	fmt.Println(req)
 
 	// orchestrator call
 	user, err := h.orchestrator.Login(req.Email, req.Password)
@@ -46,7 +44,6 @@ func (h *LoginRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 		c.AbortWithError(400, err)
 	}
 	token, err := expense.GenerateToken(*user)
-	fmt.Println("token Details: ", token)
 	if err != nil {
 		c.AbortWithError(400, err)
 	}

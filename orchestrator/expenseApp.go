@@ -86,13 +86,19 @@ func (e *ExpenseAppImpl) CreateExpense(userId string, exp expense.ExpenseCreate)
 	if !validator.Ok() {
 		return nil, validator.Err()
 	}
+
+	payers := lodash.Keys(exp.PayeeW.Payer.GetPayers())
+	if len(payers) == 0 {
+		return nil, expense.ErrValidation("payers are required")
+	}
+
 	friends, err := e.GetUserService().GetFriends(userId)
 	if err != nil {
 		return nil, err
 	}
 	friendNetwork := lodash.Union(lodash.Map(friends, func(u expense.User, _ int) string { return u.ID }), []string{userId})
 
-	expenseMembers := lodash.Union(lodash.Keys(exp.Payee.GetPayers()), lodash.Keys(exp.Split.GetPayeeSplit()))
+	expenseMembers := lodash.Union(lodash.Keys(exp.PayeeW.Payer.GetPayers()), lodash.Keys(exp.SplitW.Split.GetPayeeSplit()))
 	areValidFriends := lodash.ContainsBy(expenseMembers, func(uid string) bool {
 		return lodash.Contains(friendNetwork, uid)
 	})
@@ -101,11 +107,11 @@ func (e *ExpenseAppImpl) CreateExpense(userId string, exp expense.ExpenseCreate)
 		return nil, expense.ErrValidation("all expense members should be friends of expense creator")
 	}
 
-	if exp.Amount != exp.Split.ComputeTotal() {
+	if exp.Amount != exp.SplitW.Split.ComputeTotal() {
 		return nil, expense.ErrValidation("split amount is not same as expense amount")
 	}
 
-	if exp.Payee.GetTotal() != exp.Amount {
+	if exp.PayeeW.Payer.GetTotal() != exp.Amount {
 		return nil, expense.ErrValidation("payer contribution total is not same as expense amount")
 	}
 
@@ -135,7 +141,7 @@ func (e *ExpenseAppImpl) UpdateExpense(userId string, exp expense.Expense) (*exp
 
 		userAllowed = userAllowed || lodash.ContainsBy(groupMembers.Users, func(u expense.User) bool { return u.ID == userId })
 	}
-	existingExpenseUsers := lodash.Union(lodash.Keys(existingExp.Payee.GetPayers()), lodash.Keys(existingExp.Split.GetPayeeSplit()))
+	existingExpenseUsers := lodash.Union(lodash.Keys(existingExp.PayeeW.Payer.GetPayers()), lodash.Keys(existingExp.SplitW.Split.GetPayeeSplit()))
 	userAllowed = userAllowed || lodash.ContainsBy(existingExpenseUsers, func(uid string) bool { return uid == userId })
 	if !userAllowed {
 		return nil, expense.ErrValidation("user is not authorised to update expense, only members of this expense or members of group can edit this")
@@ -146,7 +152,7 @@ func (e *ExpenseAppImpl) UpdateExpense(userId string, exp expense.Expense) (*exp
 	if !validator.Ok() {
 		return nil, validator.Err()
 	}
-	if !(exp.Amount == exp.Payee.GetTotal()) || !(exp.Amount == exp.Split.ComputeTotal()) {
+	if !(exp.Amount == exp.PayeeW.Payer.GetTotal()) || !(exp.Amount == exp.SplitW.Split.ComputeTotal()) {
 		return nil, expense.ErrValidation("amount mismatch between payer or split when compared with expense amount")
 	}
 
@@ -156,7 +162,7 @@ func (e *ExpenseAppImpl) UpdateExpense(userId string, exp expense.Expense) (*exp
 	}
 
 	// validate is all expense members are friends of expense creator
-	expUsers := lodash.Union(lodash.Keys(exp.Payee.GetPayers()), lodash.Keys(exp.Split.GetPayeeSplit()))
+	expUsers := lodash.Union(lodash.Keys(exp.PayeeW.Payer.GetPayers()), lodash.Keys(exp.SplitW.Split.GetPayeeSplit()))
 	areValidFriends := lodash.ContainsBy(expUsers, func(uid string) bool {
 		return lodash.ContainsBy(friends, func(f expense.User) bool { return f.ID == uid })
 	})
@@ -166,8 +172,8 @@ func (e *ExpenseAppImpl) UpdateExpense(userId string, exp expense.Expense) (*exp
 
 	// updating selected fields from existing expense
 	expenseUpdate := *existingExp
-	expenseUpdate.Payee = exp.Payee
-	expenseUpdate.Split = exp.Split
+	expenseUpdate.PayeeW = exp.PayeeW
+	expenseUpdate.SplitW = exp.SplitW
 	expenseUpdate.Description = exp.Description
 	expenseUpdate.Amount = exp.Amount
 

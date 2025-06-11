@@ -3,6 +3,8 @@ package expense
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/samber/lo"
 )
 
 type Split interface {
@@ -77,14 +79,15 @@ type Fraction struct {
 }
 
 type ShareSplit struct {
-	SplitMap    map[string]Fraction `json:"splitMap"`
-	TotalAmount float64             `json:"totalAmount"`
+	SplitMap    map[string]int `json:"splitMap"`
+	TotalAmount float64        `json:"totalAmount"`
 }
 
 func (s *ShareSplit) ComputeTotal() float64 {
 	var total float64
-	for _, fr := range s.SplitMap {
-		total += float64(fr.Numerator/fr.Denominator) * s.TotalAmount
+	var totalShares = lo.Sum(lo.Values(s.SplitMap))
+	for _, share := range s.SplitMap {
+		total += float64(share/totalShares) * s.TotalAmount
 	}
 
 	return total
@@ -93,8 +96,9 @@ func (s *ShareSplit) ComputeTotal() float64 {
 func (s *ShareSplit) GetPayeeSplit() map[string]float64 {
 	splitDetail := map[string]float64{}
 
+	var totalShares = lo.Sum(lo.Values(s.SplitMap))
 	for uid, fr := range s.SplitMap {
-		splitDetail[uid] = float64(fr.Numerator/fr.Denominator) * s.TotalAmount
+		splitDetail[uid] = float64(fr/totalShares) * s.TotalAmount
 	}
 
 	return splitDetail
@@ -102,51 +106,44 @@ func (s *ShareSplit) GetPayeeSplit() map[string]float64 {
 
 // SplitWrapper handles JSON marshaling/unmarshaling of Split interface
 type SplitWrapper struct {
-	Split Split           `json:"-"`
-	Type  string          `json:"type"`
-	Data  json.RawMessage `json:"data"`
+	Split Split  `json:"-"`
+	Type  string `json:"type"`
 }
 
 // MarshalJSON custom marshaling for Split interface
 func (sw SplitWrapper) MarshalJSON() ([]byte, error) {
-	// Marshal the underlying data
-	data, err := json.Marshal(sw.Split)
-	if err != nil {
-		return nil, err
-	}
+
+	var sj SplitJson
 
 	// Determine the type
-	var typeName string
 	switch sw.Split.(type) {
 	case *EqualSplit:
-		typeName = "equal"
+		sj.Type = "equal"
+		sj.EqualSplit = sw.Split.(*EqualSplit).Payee
+		sj.TotalAmount = sw.Split.(*EqualSplit).TotalAmount
 	case *UnitSplit:
-		typeName = "unit"
+		sj.Type = "unit"
+		sj.UnitSplit = sw.Split.(*UnitSplit).PayeeAmountSplit
 	case *PercentageSplit:
-		typeName = "percentage"
+		sj.Type = "percentage"
+		sj.PercentageSplit = sw.Split.(*PercentageSplit).PercentageSplitMap
+		sj.TotalAmount = sw.Split.(*PercentageSplit).TotalAmount
 	case *ShareSplit:
-		typeName = "share"
+		sj.Type = "share"
+		sj.ShareSplit = sw.Split.(*ShareSplit).SplitMap
+		sj.TotalAmount = sw.Split.(*ShareSplit).TotalAmount
 	default:
 		return nil, fmt.Errorf("unknown split type: %T", sw.Split)
 	}
 
-	// Create wrapper JSON
-	return json.Marshal(struct {
-		Type string          `json:"type"`
-		Data json.RawMessage `json:"data"`
-	}{
-		Type: typeName,
-		Data: data,
-	})
+	return json.Marshal(sj)
+
 }
 
 // UnmarshalJSON custom unmarshaling for Split interface
 func (sw *SplitWrapper) UnmarshalJSON(data []byte) error {
 	// First unmarshal to get the type
-	var temp struct {
-		Type string          `json:"type"`
-		Data json.RawMessage `json:"data"`
-	}
+	var temp SplitJson
 	if err := json.Unmarshal(data, &temp); err != nil {
 		return err
 	}
@@ -155,27 +152,22 @@ func (sw *SplitWrapper) UnmarshalJSON(data []byte) error {
 	switch temp.Type {
 	case "equal":
 		var es EqualSplit
-		if err := json.Unmarshal(temp.Data, &es); err != nil {
-			return err
-		}
+		es.Payee = temp.EqualSplit
+		es.TotalAmount = temp.TotalAmount
 		sw.Split = &es
 	case "unit":
 		var us UnitSplit
-		if err := json.Unmarshal(temp.Data, &us); err != nil {
-			return err
-		}
+		us.PayeeAmountSplit = temp.UnitSplit
 		sw.Split = &us
 	case "percentage":
 		var ps PercentageSplit
-		if err := json.Unmarshal(temp.Data, &ps); err != nil {
-			return err
-		}
+		ps.TotalAmount = temp.TotalAmount
+		ps.PercentageSplitMap = temp.PercentageSplit
 		sw.Split = &ps
 	case "share":
 		var ss ShareSplit
-		if err := json.Unmarshal(temp.Data, &ss); err != nil {
-			return err
-		}
+		ss.TotalAmount = temp.TotalAmount
+		ss.SplitMap = temp.ShareSplit
 		sw.Split = &ss
 	default:
 		return fmt.Errorf("unknown split type: %s", temp.Type)

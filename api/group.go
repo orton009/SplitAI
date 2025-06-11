@@ -13,7 +13,7 @@ type JoinGroupRouteHandler struct {
 }
 
 func (h *JoinGroupRouteHandler) Method() Method {
-	return POST
+	return PUT
 }
 
 func (h *JoinGroupRouteHandler) Path() string {
@@ -27,20 +27,20 @@ func (h *JoinGroupRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 	}
 	var req JoinGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": "invalid request"})
-		return
+		c.AbortWithError(400, err)
 	}
+
 	userId, err := CtxGetUserId(c)
 	if err != nil {
-		c.Status(500)
+		c.AbortWithError(500, err)
 	}
 
 	// orchestrator call
-	_, err = h.orchestrator.JoinGroup(userId, req.MemberId, c.Param("id"))
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
+	ok, err := h.orchestrator.JoinGroup(userId, req.MemberId, c.Param("id"))
+	if err != nil || !ok {
+		c.AbortWithError(400, err)
 	}
+
 	// response
 	c.Status(201)
 }
@@ -67,8 +67,7 @@ func (h *CreateGroupRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 
 	var req CreateGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": "invalid request"})
-		return
+		c.AbortWithError(400, err)
 	}
 	userId, err := CtxGetUserId(c)
 	if err != nil {
@@ -79,8 +78,7 @@ func (h *CreateGroupRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 	// orchestrator call
 	group, err := h.orchestrator.CreateGroup(userId, req.Name, req.Description)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
+		c.AbortWithError(400, err)
 	}
 	// response
 	c.JSON(201, group)

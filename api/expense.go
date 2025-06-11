@@ -23,7 +23,6 @@ func (h *CreateOrUpdateExpenseRouteHandler) Path() string {
 
 func (h *CreateOrUpdateExpenseRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 
-	// marshalled, _ := expense.PayerWrapper{Payer: &expense.SinglePayer{payer: "f684518d-9843-44b4-b509-093159d51710", amount: 100}}.MarshalJSON()
 	userId, err := CtxGetUserId(c)
 	if err != nil {
 		c.AbortWithError(500, err)
@@ -49,8 +48,8 @@ func (h *CreateOrUpdateExpenseRouteHandler) Handle(c *gin.Context, cfg *config.C
 			ID:          req.ID,
 			Description: req.Description,
 			Amount:      req.Amount,
-			Split:       req.Split.Split,
-			Payee:       req.Payee.Payer,
+			SplitW:      req.Split,
+			PayeeW:      req.Payee,
 		})
 
 	} else {
@@ -59,8 +58,8 @@ func (h *CreateOrUpdateExpenseRouteHandler) Handle(c *gin.Context, cfg *config.C
 		updatedExpense, err = h.orchestrator.CreateExpense(userId, expense.ExpenseCreate{
 			Description:    req.Description,
 			Amount:         req.Amount,
-			Split:          req.Split.Split,
-			Payee:          req.Payee.Payer,
+			SplitW:         req.Split,
+			PayeeW:         req.Payee,
 			IsGroupExpense: len(req.GroupId) > 0,
 			GroupId:        req.GroupId,
 		})

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"splitExpense/config"
 	expense "splitExpense/expense"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -71,16 +72,27 @@ func (u *UserServiceImpl) CreateGroup(userId string, name string, description st
 	}
 
 	for _, g := range groups {
-		if g.Name == name {
+		if strings.EqualFold(g.Name, name) {
 			return nil, errors.New("group with same name already exists")
 		}
 	}
-
-	return u.storage.CreateOrUpdateGroup(expense.Group{
+	group := expense.Group{
+		Id:          uuid.New().String(),
 		Name:        name,
 		Description: description,
 		Admin:       userId,
-	})
+	}
+	updatedGroup, err := u.storage.CreateOrUpdateGroup(group)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = u.storage.AddUserInGroup(userId, updatedGroup.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	return updatedGroup, nil
 }
 
 func (u *UserServiceImpl) GetAssociatedGroups(userId string) ([]expense.Group, error) {

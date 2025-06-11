@@ -32,7 +32,7 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 		}
 	}
 
-	payeeMap := expenseCreate.Split.GetPayeeSplit()
+	payeeMap := expenseCreate.SplitW.Split.GetPayeeSplit()
 
 	// check if all users exist in DB
 	for uid := range payeeMap {
@@ -42,7 +42,7 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 		}
 	}
 
-	for uid := range expenseCreate.Payee.GetPayers() {
+	for uid := range expenseCreate.PayeeW.Payer.GetPayers() {
 		_, err := e.storage.FetchUserById(uid)
 		if err != nil {
 			return nil, errors.Join(errors.New("one of the payers does not exist"))
@@ -52,27 +52,22 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 	exp := expense.Expense{
 		ID:          uuid.New().String(),
 		Description: expenseCreate.Description,
-		Split:       expenseCreate.Split,
+		SplitW:      expenseCreate.SplitW,
 		CreatedAt:   time.Now(),
-		Payee:       expenseCreate.Payee,
+		PayeeW:      expenseCreate.PayeeW,
 		Amount:      expenseCreate.Amount,
 		Status:      expense.ExpenseDraft,
 		GroupId:     groupID,
 		CreatedBy:   userId,
 	}
 
-	expData, err := expense.ConvertExpenseToExpenseData(&exp)
-	if err != nil {
-		return nil, err
-	}
-
 	// TODO: Add transaction LOCK
-	expData, err = e.storage.CreateOrUpdateExpense(*expData)
+	expData, err := e.storage.CreateOrUpdateExpense(exp)
 	if err != nil {
 		return nil, err
 	}
 
-	userIds := lodash.Union(lodash.Keys(payeeMap), lodash.Keys(expenseCreate.Payee.GetPayers()))
+	userIds := lodash.Union(lodash.Keys(payeeMap), lodash.Keys(expenseCreate.PayeeW.Payer.GetPayers()))
 
 	if exp.IsGroupExpense {
 
@@ -83,32 +78,32 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 	}
 
 	// TODO: CLOSE LOCK
-
-	return expense.ConvertExpenseDataToExpense(expData)
+	return expData, nil
+	// return expense.ConvertExpenseToExpense(expData)
 }
 
 func (e *ExpenseServiceImpl) UpdateExpense(userId string, exp expense.Expense) (*expense.Expense, error) {
-	data, err := e.storage.FetchExpense(exp.ID)
+	existingExp, err := e.storage.FetchExpense(exp.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	existingExp, err := expense.ConvertExpenseDataToExpense(data)
-	if err != nil {
-		return nil, err
-	}
+	// existingExp, err := expense.ConvertExpenseToExpense(data)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	if existingExp.CreatedAt != exp.CreatedAt || existingExp.CreatedBy != exp.CreatedBy {
 		return nil, errors.New("protected field change")
 	}
 
-	existingPayers := lodash.Keys(existingExp.Payee.GetPayers())
-	newPayers := lodash.Keys(exp.Payee.GetPayers())
+	existingPayers := lodash.Keys(existingExp.PayeeW.Payer.GetPayers())
+	newPayers := lodash.Keys(exp.PayeeW.Payer.GetPayers())
 	payersToRemove, payersToAdd := lodash.Difference(existingPayers, newPayers)
 
 	// borrowers
-	existingB := lodash.Keys(existingExp.Split.GetPayeeSplit())
-	newB := lodash.Keys(exp.Split.GetPayeeSplit())
+	existingB := lodash.Keys(existingExp.SplitW.Split.GetPayeeSplit())
+	newB := lodash.Keys(exp.SplitW.Split.GetPayeeSplit())
 	removeB, addB := lodash.Difference(existingB, newB)
 
 	usersToAdd := lodash.Union(addB, payersToAdd)
@@ -130,32 +125,21 @@ func (e *ExpenseServiceImpl) UpdateExpense(userId string, exp expense.Expense) (
 		return nil, err
 	}
 
-	expData, err := expense.ConvertExpenseToExpenseData(&exp)
+	updatedExp, err := e.storage.CreateOrUpdateExpense(exp)
 	if err != nil {
 		return nil, err
 	}
-	updatedExpData, err := e.storage.CreateOrUpdateExpense(*expData)
-	if err != nil {
-		return nil, err
-	}
-	updatedExp, err := expense.ConvertExpenseDataToExpense(updatedExpData)
-	if err != nil {
-		return nil, err
-	}
+
 	return updatedExp, err
 }
 
 func (e *ExpenseServiceImpl) DeleteExpense(userId string, expenseId string) (bool, error) {
-	expenseData, err := e.storage.FetchExpense(expenseId)
-	if err != nil {
-		return false, err
-	}
-	exp, err := expense.ConvertExpenseDataToExpense(expenseData)
+	exp, err := e.storage.FetchExpense(expenseId)
 	if err != nil {
 		return false, err
 	}
 
-	userIds := lodash.Union(lodash.Keys(exp.Payee.GetPayers()), lodash.Keys(exp.Split.GetPayeeSplit()))
+	userIds := lodash.Union(lodash.Keys(exp.PayeeW.Payer.GetPayers()), lodash.Keys(exp.SplitW.Split.GetPayeeSplit()))
 
 	// TODO: ADD LOCK
 	_, err = e.storage.RemoveUserFromExpense(exp.ID, userIds)
@@ -166,16 +150,16 @@ func (e *ExpenseServiceImpl) DeleteExpense(userId string, expenseId string) (boo
 }
 
 func (e *ExpenseServiceImpl) SettleExpense(userId string, expenseId string) (*expense.Expense, error) {
-	expenseData, err := e.storage.FetchExpense(expenseId)
+	Expense, err := e.storage.FetchExpense(expenseId)
 	if err != nil {
 		return nil, err
 	}
-	expenseData.Status = expense.ExpenseSettled
-	updatedData, err := e.storage.CreateOrUpdateExpense(*expenseData)
+	Expense.Status = expense.ExpenseSettled
+	updatedData, err := e.storage.CreateOrUpdateExpense(*Expense)
 	if err != nil {
 		return nil, err
 	}
-	return expense.ConvertExpenseDataToExpense(updatedData)
+	return updatedData, nil
 }
 
 func (e *ExpenseServiceImpl) FetchExpense(id string) (*expense.Expense, error) {
@@ -185,12 +169,7 @@ func (e *ExpenseServiceImpl) FetchExpense(id string) (*expense.Expense, error) {
 		return nil, err
 	}
 
-	expData, err := e.storage.FetchExpense(id)
-	if err != nil {
-		return nil, err
-	}
-
-	exp, err := expense.ConvertExpenseDataToExpense(expData)
+	exp, err := e.storage.FetchExpense(id)
 	if err != nil {
 		return nil, err
 	}

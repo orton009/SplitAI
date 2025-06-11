@@ -69,22 +69,26 @@ func routeMap(o orchestrator.ExpenseAppImpl) []ApiHandler {
 		{
 			handle: &userSignUpHandler{orchestrator: o},
 		},
-		// {
-		// 	handle:      &DeleteExpenseRouteHandler{orchestrator: o},
-		// 	PreHandlers: []gin.HandlerFunc{Authenticate},
-		// },
-		// {
-		// 	handle:      &CreateGroupRouteHandler{orchestrator: o},
-		// 	PreHandlers: []gin.HandlerFunc{Authenticate},
-		// },
+		{
+			handle:      &DeleteExpenseRouteHandler{orchestrator: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
+		{
+			handle:      &CreateGroupRouteHandler{orchestrator: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
 		{
 			handle:      &CreateOrUpdateExpenseRouteHandler{orchestrator: o},
 			PreHandlers: []gin.HandlerFunc{Authenticate},
 		},
-		// {
-		// 	handle:      &SettleExpenseHandler{orchestrator: o},
-		// 	PreHandlers: []gin.HandlerFunc{Authenticate},
-		// },
+		{
+			handle:      &SettleExpenseHandler{orchestrator: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
+		{
+			handle:      &JoinGroupRouteHandler{orchestrator: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
 	}
 }
 

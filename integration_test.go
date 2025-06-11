@@ -34,10 +34,11 @@ func TestIntegration(t *testing.T) {
 		t.Error(err)
 	}
 	token := response.Token
+	// groupName := "test-group-" + uuid.New().String()
 	tests := []string{
-		fmt.Sprintf(`curl -X POST 'http://localhost:8888/v1/expenses' -H "Content-Type: application/json" -H "Authorization: Bearer %s " -d '{"description":"test expense","amount": 100,"split": {"type": "equal", "data": {"payee": ["f684518d-9843-44b4-b509-093159d51710"], "totalAmount": 100}},"payee": {"type": "single", "data": {"payer": "f684518d-9843-44b4-b509-093159d51710", "amount": 100}}}'`, token),
-		fmt.Sprintf(`curl -X POST 'http://localhost:8888/api/groups' -H "Content-Type: application/json" -H "Authorization: Bearer %s" -d '{"name":  "test group","description":  "This is a test group","admin_id":  "userId"}'`, token),
-		fmt.Sprintf(`curl -X POST 'http://localhost:8888/api/groups/{groupId}/invite' -H "Content-Type: application/json" -H "Authorization: Bearer %s" -d '{"user_id":  "userId"}'`, token),
+		// fmt.Sprintf(`curl -X POST 'http://localhost:8888/v1/expenses' -H "Content-Type: application/json" -H "Authorization: Bearer %s " -d '{"description":"test expense","amount": 100,"split": {"type": "equal", "equalSplit": ["f684518d-9843-44b4-b509-093159d51710"], "totalAmount": 100},"payee": {"type": "single", "payerSplit": {"f684518d-9843-44b4-b509-093159d51710": 100}}}'`, token),
+		// fmt.Sprintf(`curl -X POST 'http://localhost:8888/v1/group' -H "Content-Type: application/json" -H "Authorization: Bearer %s" -d '{"name":  "%s","description":  "This is a test group"}'`, token, groupName),
+		fmt.Sprintf(`curl -X PUT 'http://localhost:8888/v1/group/8e0243b3-3d9a-4a28-b7e1-63a11a53f064/invite' -H "Content-Type: application/json" -H "Authorization: Bearer %s" -d '{"new_member_id":  "f684518d-9843-44b4-b509-093159d51710"}'`, token),
 	}
 
 	for _, test := range tests {

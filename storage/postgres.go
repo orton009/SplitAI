@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"splitExpense/config"
@@ -16,7 +18,10 @@ import (
 
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
+
+	sqldblogger "github.com/simukti/sqldb-logger"
+	"github.com/simukti/sqldb-logger/logadapter/zerologadapter"
 )
 
 // NewPostgresDB establishes a new PostgreSQL connection using config values
@@ -30,7 +35,17 @@ func NewPostgresDB(cfg *config.Config) (*sql.DB, error) {
 		cfg.DatabaseName,
 		cfg.DatabaseSSLMode,
 	)
-	return sql.Open("postgres", dsn)
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		log.Fatal("failed to establish db connection: ", err)
+	}
+
+	logger := zerolog.New(os.Stdout).With().Timestamp().Logger().Output(zerolog.ConsoleWriter{Out: os.Stdout})
+
+	loggerAdapter := zerologadapter.New(logger)
+	db = sqldblogger.OpenDriver(dsn, db.Driver(), loggerAdapter /*, using_default_options*/) // db is STILL *sql.DB
+	return db, err
 }
 
 type DBStorage struct {
@@ -43,7 +58,7 @@ type DBStorage struct {
 func NewDBStorage(ctx *context.Context, config *config.Config) *DBStorage {
 	pg, err := NewPostgresDB(config)
 	if err != nil {
-		log.Error().Err(err).Msg("error creating postgres connection")
+		log.Fatal("error creating postgres connectiong", err)
 		return nil
 	}
 	return &DBStorage{
@@ -220,8 +235,8 @@ func (d *DBStorage) FetchGroupExpenses(groupId string, pageNumber int) ([]models
 					CreatedBy:      row.CreatedBy.UUID.String(),
 					SettledBy:      row.SettledBy.UUID.String(),
 					CreatedAt:      row.CreatedAt.Time,
-					Split:          splitW.Split,
-					Payee:          payeeW.Payer,
+					SplitW:         splitW,
+					PayeeW:         payeeW,
 					IsGroupExpense: true,
 					GroupId:        groupId,
 				},
@@ -256,10 +271,11 @@ func (d *DBStorage) CreateOrUpdateGroup(group models.Group) (*models.Group, erro
 func (d *DBStorage) AddUserInGroup(userId string, groupId string) (bool, error) {
 	uid, _ := uuid.Parse(userId)
 	gid, _ := uuid.Parse(groupId)
-	return d.queries.AddUserInGroup(*d.ctx, db.AddUserInGroupParams{
+	result, err := d.queries.AddUserInGroup(*d.ctx, db.AddUserInGroupParams{
 		UserID:  uid,
 		GroupID: gid,
 	})
+	return result, err
 }
 
 func (d *DBStorage) RemoveUserFromGroup(userId string, groupId string) (bool, error) {
@@ -271,7 +287,7 @@ func (d *DBStorage) RemoveUserFromGroup(userId string, groupId string) (bool, er
 	})
 }
 
-func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.ExpenseData, error) {
+func (d *DBStorage) CreateOrUpdateExpense(expense models.Expense) (*models.Expense, error) {
 
 	var err error
 
@@ -295,15 +311,25 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.E
 		return nil, err
 	}
 
+	splitJson, err := json.Marshal(expense.SplitW)
+	if err != nil {
+		return nil, err
+	}
+
+	payeeJson, err := json.Marshal(expense.PayeeW)
+	if err != nil {
+		return nil, err
+	}
+
 	e, err := d.queries.CreateOrUpdateExpense(*d.ctx, db.CreateOrUpdateExpenseParams{
 		ID:          parsed,
 		Description: sql.NullString{String: expense.Description, Valid: true},
 		Amount:      amountStr,
-		Split:       json.RawMessage(expense.Split),
+		Split:       json.RawMessage(splitJson),
 		Status:      string(expense.Status),
 		SettledBy:   uuid.NullUUID{UUID: settledBy, Valid: expense.SettledBy != ""},
 		CreatedBy:   uuid.NullUUID{UUID: createdBy, Valid: expense.CreatedBy != ""},
-		Payee:       json.RawMessage(expense.Payee),
+		Payee:       json.RawMessage(payeeJson),
 		CreatedAt:   sql.NullTime{Time: createdAt, Valid: true},
 		UpdatedAt:   sql.NullTime{Time: now, Valid: true},
 	})
@@ -311,11 +337,15 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.E
 		return nil, err
 	}
 	amount, _ := strconv.ParseFloat(e.Amount, 64)
-	payeeW, err := e.Payee.MarshalJSON()
+
+	var payeeW models.PayerWrapper
+	err = json.Unmarshal(e.Payee, &payeeW)
 	if err != nil {
 		return nil, err
 	}
-	splitW, err := e.Split.MarshalJSON()
+
+	var splitW models.SplitWrapper
+	err = json.Unmarshal(e.Split, &splitW)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +355,7 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.E
 		settledBy_ = e.SettledBy.UUID.String()
 	}
 
-	return &models.ExpenseData{
+	return &models.Expense{
 		ID:          e.ID.String(),
 		Description: e.Description.String,
 		Amount:      amount,
@@ -333,12 +363,12 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.ExpenseData) (*models.E
 		CreatedBy:   e.CreatedBy.UUID.String(),
 		SettledBy:   settledBy_,
 		CreatedAt:   e.CreatedAt.Time,
-		Payee:       string(payeeW),
-		Split:       string(splitW),
+		PayeeW:      payeeW,
+		SplitW:      splitW,
 	}, nil
 }
 
-func (d *DBStorage) FetchExpense(id string) (*models.ExpenseData, error) {
+func (d *DBStorage) FetchExpense(id string) (*models.Expense, error) {
 	expenseUUID, err := uuid.Parse(id)
 	if err != nil {
 		return nil, err
@@ -347,8 +377,20 @@ func (d *DBStorage) FetchExpense(id string) (*models.ExpenseData, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	var payeeW models.PayerWrapper
+	err = json.Unmarshal(e.Payee, &payeeW)
+	if err != nil {
+		return nil, err
+	}
+
+	var splitW models.SplitWrapper
+	err = json.Unmarshal(e.Split, &splitW)
+	if err != nil {
+		return nil, err
+	}
 	amount, _ := strconv.ParseFloat(e.Amount, 64)
-	return &models.ExpenseData{
+	return &models.Expense{
 		ID:          e.ID.String(),
 		Description: e.Description.String,
 		Amount:      amount,
@@ -356,8 +398,8 @@ func (d *DBStorage) FetchExpense(id string) (*models.ExpenseData, error) {
 		CreatedBy:   e.CreatedBy.UUID.String(),
 		SettledBy:   e.SettledBy.UUID.String(),
 		CreatedAt:   e.CreatedAt.Time,
-		Payee:       string(e.Payee),
-		Split:       string(e.Split),
+		PayeeW:      payeeW,
+		SplitW:      splitW,
 	}, nil
 }
 

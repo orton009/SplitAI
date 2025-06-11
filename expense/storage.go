@@ -31,8 +31,8 @@ type Storage interface {
 	AddUserInGroup(userId string, groupId string) (bool, error)
 	RemoveUserFromGroup(userId string, groupId string) (bool, error)
 
-	CreateOrUpdateExpense(expense ExpenseData) (*ExpenseData, error)
-	FetchExpense(id string) (*ExpenseData, error)
+	CreateOrUpdateExpense(expense Expense) (*Expense, error)
+	FetchExpense(id string) (*Expense, error)
 	FetchExpenseAssociatedGroup(expenseId string) (ok bool, groupId string, err error)
 	CheckUserExistsInGroup(userId string, groupId string) (bool, error)
 	AttachExpenseToGroup(expenseId string, groupId string, users []string) (bool, error)
