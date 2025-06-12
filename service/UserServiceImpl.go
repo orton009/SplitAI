@@ -49,8 +49,7 @@ func (u *UserServiceImpl) CreateUser(name string, email string, password string)
 }
 
 func (u *UserServiceImpl) JoinGroup(userId string, groupId string) (bool, error) {
-	ok, err := u.storage.AddUserInGroup(userId, groupId)
-	return ok, err
+	return u.storage.AddUserInGroup(userId, groupId)
 }
 
 func (u *UserServiceImpl) LeaveGroup(userId string, groupId string) (bool, error) {

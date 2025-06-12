@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"crypto"
 	"encoding/base64"
+	"math"
 	"splitExpense/config"
 	"splitExpense/expense"
 	"splitExpense/service"
@@ -42,7 +43,20 @@ func (e *ExpenseAppImpl) UserSignup(name, email, password string) (*expense.User
 	}
 }
 
-func (e *ExpenseAppImpl) JoinGroup(userId, newMemberId, groupId string) (bool, *expense.AppError) {
+func (e *ExpenseAppImpl) AddFriend(userId, friendId string) (bool, error) {
+	validator := NewValidator().NonEmptyID(userId).NonEmptyID(userId)
+	if !validator.Ok() {
+		return false, validator.Err()
+	}
+
+	ok, err := e.userService.AddFriend(userId, friendId)
+	if err != nil {
+		return false, expense.ErrService(err.Error())
+	}
+	return ok, nil
+}
+
+func (e *ExpenseAppImpl) JoinGroup(userId, newMemberId, groupId string) (bool, error) {
 	validator := NewValidator().NonEmptyID(userId).NonEmptyID(newMemberId).NonEmptyID(groupId)
 	if !validator.Ok() {
 		return false, validator.Err()
@@ -81,6 +95,10 @@ func (e *ExpenseAppImpl) CreateGroup(userId, name, description string) (*expense
 	return e.userService.CreateGroup(userId, name, description)
 }
 
+func (e *ExpenseAppImpl) verifyAmount(a1 float64, a2 float64) bool {
+	return math.Round(a1*100)/100 == math.Round(a2*100)/100
+}
+
 func (e *ExpenseAppImpl) CreateExpense(userId string, exp expense.ExpenseCreate) (*expense.Expense, error) {
 	validator := NewValidator().NonEmptyID(userId).LeastAmount(exp.Amount)
 	if !validator.Ok() {
@@ -107,11 +125,11 @@ func (e *ExpenseAppImpl) CreateExpense(userId string, exp expense.ExpenseCreate)
 		return nil, expense.ErrValidation("all expense members should be friends of expense creator")
 	}
 
-	if exp.Amount != exp.SplitW.Split.ComputeTotal() {
+	if !e.verifyAmount(exp.Amount, exp.SplitW.Split.ComputeTotal()) {
 		return nil, expense.ErrValidation("split amount is not same as expense amount")
 	}
 
-	if exp.PayeeW.Payer.GetTotal() != exp.Amount {
+	if !e.verifyAmount(exp.PayeeW.Payer.GetTotal(), exp.Amount) {
 		return nil, expense.ErrValidation("payer contribution total is not same as expense amount")
 	}
 
@@ -152,7 +170,7 @@ func (e *ExpenseAppImpl) UpdateExpense(userId string, exp expense.Expense) (*exp
 	if !validator.Ok() {
 		return nil, validator.Err()
 	}
-	if !(exp.Amount == exp.PayeeW.Payer.GetTotal()) || !(exp.Amount == exp.SplitW.Split.ComputeTotal()) {
+	if !e.verifyAmount(exp.Amount, exp.PayeeW.Payer.GetTotal()) || !e.verifyAmount(exp.Amount, exp.SplitW.Split.ComputeTotal()) {
 		return nil, expense.ErrValidation("amount mismatch between payer or split when compared with expense amount")
 	}
 

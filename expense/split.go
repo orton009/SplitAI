@@ -87,9 +87,8 @@ func (s *ShareSplit) ComputeTotal() float64 {
 	var total float64
 	var totalShares = lo.Sum(lo.Values(s.SplitMap))
 	for _, share := range s.SplitMap {
-		total += float64(share/totalShares) * s.TotalAmount
+		total += float64(share) / float64(totalShares) * s.TotalAmount
 	}
-
 	return total
 }
 

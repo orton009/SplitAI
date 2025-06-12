@@ -89,6 +89,10 @@ func routeMap(o orchestrator.ExpenseAppImpl) []ApiHandler {
 			handle:      &JoinGroupRouteHandler{orchestrator: o},
 			PreHandlers: []gin.HandlerFunc{Authenticate},
 		},
+		{
+			handle:      &AddFriendHandler{o: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
 	}
 }
 

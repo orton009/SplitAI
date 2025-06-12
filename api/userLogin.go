@@ -42,6 +42,7 @@ func (h *LoginRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 	user, err := h.orchestrator.Login(req.Email, req.Password)
 	if err != nil {
 		c.AbortWithError(400, err)
+		return
 	}
 	token, err := expense.GenerateToken(*user)
 	if err != nil {
@@ -51,4 +52,31 @@ func (h *LoginRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 
 	// response
 	c.JSON(200, gin.H{"token": token, "user": user})
+}
+
+type AddFriendHandler struct {
+	o orchestrator.ExpenseAppImpl
+}
+
+func (a *AddFriendHandler) Method() Method {
+	return PUT
+}
+
+func (a *AddFriendHandler) Path() string {
+	return Path("/friend/:id/add")
+}
+
+func (a *AddFriendHandler) Handle(c *gin.Context, cfg *config.Config) {
+	friendId := c.Param("id")
+	userId, err := CtxGetUserId(c)
+	if err != nil {
+		c.AbortWithError(500, err)
+	}
+
+	ok, err := a.o.AddFriend(userId, friendId)
+	if err != nil || !ok {
+		c.AbortWithError(500, err)
+	}
+	c.Status(201)
+
 }

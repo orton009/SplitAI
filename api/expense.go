@@ -18,7 +18,7 @@ func (h *CreateOrUpdateExpenseRouteHandler) Method() Method {
 }
 
 func (h *CreateOrUpdateExpenseRouteHandler) Path() string {
-	return Path("/expenses")
+	return Path("/expense")
 }
 
 func (h *CreateOrUpdateExpenseRouteHandler) Handle(c *gin.Context, cfg *config.Config) {

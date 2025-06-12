@@ -271,20 +271,28 @@ func (d *DBStorage) CreateOrUpdateGroup(group models.Group) (*models.Group, erro
 func (d *DBStorage) AddUserInGroup(userId string, groupId string) (bool, error) {
 	uid, _ := uuid.Parse(userId)
 	gid, _ := uuid.Parse(groupId)
-	result, err := d.queries.AddUserInGroup(*d.ctx, db.AddUserInGroupParams{
+	_, err := d.queries.AddUserInGroup(*d.ctx, db.AddUserInGroupParams{
 		UserID:  uid,
 		GroupID: gid,
 	})
-	return result, err
+	if err == nil || err == sql.ErrNoRows {
+		return true, nil
+	} else {
+		return false, err
+	}
 }
 
 func (d *DBStorage) RemoveUserFromGroup(userId string, groupId string) (bool, error) {
 	uid, _ := uuid.Parse(userId)
 	gid, _ := uuid.Parse(groupId)
-	return d.queries.RemoveUserFromGroup(*d.ctx, db.RemoveUserFromGroupParams{
+	_, err := d.queries.RemoveUserFromGroup(*d.ctx, db.RemoveUserFromGroupParams{
 		UserID:  uid,
 		GroupID: gid,
 	})
+	if err == nil || err == sql.ErrNoRows {
+		return true, nil
+	}
+	return false, err
 }
 
 func (d *DBStorage) CreateOrUpdateExpense(expense models.Expense) (*models.Expense, error) {
