@@ -197,11 +197,12 @@ func (d *DBStorage) FetchGroupById(id string) (*models.Group, error) {
 	}, nil
 }
 
-func (d *DBStorage) FetchGroupExpenses(groupId string, pageNumber int) ([]models.GroupExpenseHistory, error) {
+func (d *DBStorage) FetchGroupExpenses(groupId string, pageNumber int) (*models.StoredGroupExpenseHistory, error) {
 	gid, _ := uuid.Parse(groupId)
 	rows, err := d.queries.FetchGroupExpenses(*d.ctx, db.FetchGroupExpensesParams{
 		GroupID: uuid.NullUUID{UUID: gid, Valid: true},
 		Column2: pageNumber,
+		Limit:   20,
 	})
 	if err != nil {
 		return nil, err
@@ -209,43 +210,31 @@ func (d *DBStorage) FetchGroupExpenses(groupId string, pageNumber int) ([]models
 
 	// Calculate total pages
 	var totalCount int
-	err = d.db.QueryRowContext(*d.ctx, "SELECT COUNT(DISTINCT e.id) FROM expense e JOIN expense_mapping em ON e.id = em.expense_id WHERE em.group_id = $1", gid).Scan(&totalCount)
-	if err != nil {
-		return nil, err
-	}
 	pageSize := 20
 	totalPages := (totalCount + pageSize - 1) / pageSize
 
-	var result []models.GroupExpenseHistory
+	result := models.StoredGroupExpenseHistory{Expenses: []models.Expense{}, TotalPages: totalPages, PageNumber: pageNumber}
 	for _, row := range rows {
-		var participants []string
-		_ = json.Unmarshal(row.ParticipantIds, &participants)
 		amount, _ := strconv.ParseFloat(row.Amount, 64)
 		var splitW models.SplitWrapper
 		_ = json.Unmarshal(row.Split, &splitW)
 		var payeeW models.PayerWrapper
 		_ = json.Unmarshal(row.Payee, &payeeW)
-		result = append(result, models.GroupExpenseHistory{
-			Expenses: []models.Expense{
-				{
-					ID:             row.ID.String(),
-					Description:    row.Description.String,
-					Amount:         amount,
-					Status:         models.ExpenseStatus(row.Status),
-					CreatedBy:      row.CreatedBy.UUID.String(),
-					SettledBy:      row.SettledBy.UUID.String(),
-					CreatedAt:      row.CreatedAt.Time,
-					SplitW:         splitW,
-					PayeeW:         payeeW,
-					IsGroupExpense: true,
-					GroupId:        groupId,
-				},
-			},
-			PageNumber: pageNumber,
-			TotalPages: totalPages,
+		result.Expenses = append(result.Expenses, models.Expense{
+			ID:             row.ID.String(),
+			Description:    row.Description.String,
+			Amount:         amount,
+			Status:         models.ExpenseStatus(row.Status),
+			CreatedBy:      row.CreatedBy.UUID.String(),
+			SettledBy:      row.SettledBy.UUID.String(),
+			CreatedAt:      row.CreatedAt.Time,
+			SplitW:         splitW,
+			PayeeW:         payeeW,
+			IsGroupExpense: true,
+			GroupId:        groupId,
 		})
 	}
-	return result, nil
+	return &result, nil
 }
 
 func (d *DBStorage) CreateOrUpdateGroup(group models.Group) (*models.Group, error) {
@@ -479,20 +468,25 @@ func (d *DBStorage) GetFriend(userId string, friendId string) (*expense.User, er
 
 }
 
-func (d *DBStorage) GetFriends(userId string) ([]expense.User, error) {
-	parsed, err := uuid.Parse(userId)
+func (d *DBStorage) GetFriends(userId string) ([]models.User, error) {
+	uid, err := uuid.Parse(userId)
 	if err != nil {
-		return []expense.User{}, err
+		return nil, err
 	}
-	rows, err := d.queries.GetFriends(*d.ctx, parsed)
+	friends, err := d.queries.GetFriends(*d.ctx, uid)
 	if err != nil {
-		return []expense.User{}, err
+		return nil, err
 	}
-	result := []expense.User{}
-	for _, row := range rows {
-		result = append(result, expense.User{Name: row.Name, Email: row.Email, ID: row.ID.String()})
+	var result []models.User
+	for _, u := range friends {
+		result = append(result, models.User{
+			ID:         u.ID.String(),
+			Name:       u.Name,
+			Email:      u.Email,
+			IsVerified: u.IsVerified,
+			Password:   "",
+		})
 	}
-
 	return result, nil
 }
 
@@ -534,4 +528,13 @@ func (d *DBStorage) FetchExpenseAssociatedGroup(expenseId string) (bool, string,
 		return false, "", err
 	}
 	return err != sql.ErrNoRows, gID.UUID.String(), nil
+}
+
+func (d *DBStorage) FetchExpenseCountByGroup(groupId string) (int, error) {
+	gid, _ := uuid.Parse(groupId)
+	count, err := d.queries.FetchExpenseCountByGroup(*d.ctx, uuid.NullUUID{UUID: gid, Valid: true})
+	if err != nil && err != sql.ErrNoRows {
+		return 0, err
+	}
+	return int(count), nil
 }

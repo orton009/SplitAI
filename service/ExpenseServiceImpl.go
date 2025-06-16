@@ -31,34 +31,19 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 			return nil, err
 		}
 	}
-
 	payeeMap := expenseCreate.SplitW.Split.GetPayeeSplit()
 
-	// check if all users exist in DB
-	for uid := range payeeMap {
-		_, err := e.storage.FetchUserById(uid)
-		if err != nil {
-			return nil, errors.Join(errors.New("one of the users does not exist"))
-		}
-	}
-
-	for uid := range expenseCreate.PayeeW.Payer.GetPayers() {
-		_, err := e.storage.FetchUserById(uid)
-		if err != nil {
-			return nil, errors.Join(errors.New("one of the payers does not exist"))
-		}
-	}
-
 	exp := expense.Expense{
-		ID:          uuid.New().String(),
-		Description: expenseCreate.Description,
-		SplitW:      expenseCreate.SplitW,
-		CreatedAt:   time.Now(),
-		PayeeW:      expenseCreate.PayeeW,
-		Amount:      expenseCreate.Amount,
-		Status:      expense.ExpenseDraft,
-		GroupId:     groupID,
-		CreatedBy:   userId,
+		ID:             uuid.New().String(),
+		Description:    expenseCreate.Description,
+		SplitW:         expenseCreate.SplitW,
+		CreatedAt:      time.Now(),
+		PayeeW:         expenseCreate.PayeeW,
+		Amount:         expenseCreate.Amount,
+		Status:         expense.ExpenseDraft,
+		CreatedBy:      userId,
+		IsGroupExpense: expenseCreate.IsGroupExpense,
+		GroupId:        expenseCreate.GroupId,
 	}
 
 	// TODO: Add transaction LOCK
@@ -67,7 +52,7 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 		return nil, err
 	}
 
-	userIds := lodash.Union(lodash.Keys(payeeMap), lodash.Keys(expenseCreate.PayeeW.Payer.GetPayers()))
+	userIds := lodash.Union([]string{userId}, lodash.Keys(payeeMap), lodash.Keys(expenseCreate.PayeeW.Payer.GetPayers()))
 
 	if exp.IsGroupExpense {
 
@@ -76,6 +61,9 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 			return nil, err
 		}
 	}
+
+	expData.GroupId = groupID
+	expData.IsGroupExpense = len(groupID) > 0
 
 	// TODO: CLOSE LOCK
 	return expData, nil
@@ -184,4 +172,40 @@ func NewExpenseServiceImpl(storage expense.Storage) *ExpenseServiceImpl {
 	return &ExpenseServiceImpl{
 		storage: storage,
 	}
+}
+
+func (e *ExpenseServiceImpl) FetchExpenseByGroup(userId string, groupId string, pageNumber int) (*expense.GroupExpenseHistory, error) {
+	if pageNumber == 0 {
+		pageNumber = 1
+	}
+
+	stored, err := e.storage.FetchGroupExpenses(groupId, pageNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &expense.GroupExpenseHistory{Expenses: []expense.DetailedExpense{}, PageNumber: stored.PageNumber, TotalPages: stored.TotalPages}
+
+	totalPayed, totalBorrowed := 0.0, 0.0
+	for _, exp := range stored.Expenses {
+		payed := exp.PayeeW.Payer.GetPayers()[userId]
+		borrowed := exp.SplitW.Split.GetPayeeSplit()[userId]
+		if payed > borrowed {
+			result.Expenses = append(result.Expenses, expense.DetailedExpense{Expense: exp, TotalOwed: payed - borrowed})
+		} else if payed < borrowed {
+			result.Expenses = append(result.Expenses, expense.DetailedExpense{Expense: exp, TotalBorrowed: borrowed - payed})
+		}
+
+		totalPayed += payed
+		totalBorrowed += borrowed
+	}
+	return result, err
+}
+
+func (e *ExpenseServiceImpl) FetchExpenseCountByGroup(groupId string) (int, error) {
+	_, err := e.storage.FetchGroupById(groupId)
+	if err != nil {
+		return 0, err
+	}
+	return e.storage.FetchExpenseCountByGroup(groupId)
 }

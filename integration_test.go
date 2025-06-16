@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/goombaio/namegenerator"
-	"github.com/samber/lo"
 )
 
 const HOST = "http://localhost:8888/v1"
@@ -57,7 +56,14 @@ func createUsers(t *testing.T) (string, expense.User, []expense.User, error) {
 		users = append(users, user)
 	}
 	// primary user
-	user := users[0]
+	// user := users[0]
+	user := expense.User{
+		Email:    "white-leaf@example.com",
+		Password: "Pass@12345",
+		Name:     "white-leaf",
+		ID:       "c76e7349-6495-4c3e-870b-903bc2559aef",
+	}
+
 	t.Log("Primary User: ", user)
 	// perform user Login
 	loginCmd := Curl("/user/login",
@@ -79,7 +85,8 @@ func createUsers(t *testing.T) (string, expense.User, []expense.User, error) {
 	token := response.Token
 
 	// use token to add rest of the users as friends of user
-	friends := lo.Slice(users, 1, len(users))
+	// friends := lo.Slice(users, 1, len(users))
+	friends := users
 	for _, friend := range friends {
 		cmd := Curl("/friend/"+friend.ID+"/add", "", apiServer.PUT, token)
 		_, err := runCommand(t, cmd, "Add friend")
@@ -109,6 +116,7 @@ func TestIntegration(t *testing.T) {
 		t.Error(err)
 	}
 
+	t.Log("friends: ", friends)
 	// invite all users to group
 	for _, friend := range friends {
 
@@ -167,7 +175,7 @@ func TestIntegration(t *testing.T) {
 	for _, split := range []([]byte){equalSplit, percentSplit, shareSplit} {
 
 		createExpenseCmd := Curl("/expense",
-			fmt.Sprintf(`{"description":"test expense","amount": 100,"split": %s,"payee": %s }`, string(split), string(payee)),
+			fmt.Sprintf(`{"description":"test expense","amount": 100,"split": %s,"payee": %s, "groupId": "%s" }`, string(split), string(payee), group.Id),
 			apiServer.POST,
 			token,
 		)

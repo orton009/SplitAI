@@ -19,6 +19,7 @@ func Start() {
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
+	r.Use(CORSMiddleware())
 	cfg := &config.Config{
 		// Fill with actual config values or load from env
 		DatabaseHost:     "localhost",
@@ -37,6 +38,29 @@ func Start() {
 	attachRoutes(r, app, cfg)
 
 	r.Run(":8888")
+}
+
+func CORSMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		origin := c.Request.Header.Get("Origin")
+
+		// Set specific origin or allow only known ones
+		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, ngrok-skip-browser-warning")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+
+		if c.Request.Method == "OPTIONS" {
+			c.Writer.WriteHeader(204)
+
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+
+	}
 }
 
 type Method string
@@ -74,6 +98,10 @@ func routeMap(o orchestrator.ExpenseAppImpl) []ApiHandler {
 			PreHandlers: []gin.HandlerFunc{Authenticate},
 		},
 		{
+			handle:      &FetchGroupDetailsHandler{o: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
+		{
 			handle:      &CreateGroupRouteHandler{orchestrator: o},
 			PreHandlers: []gin.HandlerFunc{Authenticate},
 		},
@@ -91,6 +119,14 @@ func routeMap(o orchestrator.ExpenseAppImpl) []ApiHandler {
 		},
 		{
 			handle:      &AddFriendHandler{o: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
+		{
+			handle:      &UserHomeHandler{o: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
+		{
+			handle:      &GetFriendsHandler{o: o},
 			PreHandlers: []gin.HandlerFunc{Authenticate},
 		},
 	}

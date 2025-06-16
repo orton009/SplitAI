@@ -1,6 +1,7 @@
 package apiServer
 
 import (
+	"errors"
 	"path/filepath"
 	"splitExpense/config"
 	"splitExpense/expense"
@@ -79,4 +80,85 @@ func (a *AddFriendHandler) Handle(c *gin.Context, cfg *config.Config) {
 	}
 	c.Status(201)
 
+}
+
+type UserHomeHandler struct {
+	o orchestrator.ExpenseAppImpl
+}
+
+func (a *UserHomeHandler) Method() Method {
+	return GET
+}
+
+func (a *UserHomeHandler) Path() string {
+	return Path("/user/home")
+}
+
+func (a *UserHomeHandler) Handle(c *gin.Context, cfg *config.Config) {
+	userId, err := CtxGetUserId(c)
+	if err != nil {
+		c.AbortWithError(500, err)
+	}
+
+	userHome, err := a.o.GetUserHome(userId)
+	if err != nil {
+		c.AbortWithError(500, err)
+	}
+	c.JSON(200, userHome)
+}
+
+type FetchGroupDetailsHandler struct {
+	o orchestrator.ExpenseAppImpl
+}
+
+func (a *FetchGroupDetailsHandler) Method() Method {
+	return GET
+}
+func (a *FetchGroupDetailsHandler) Path() string {
+	return Path("/group/:id")
+}
+func (a *FetchGroupDetailsHandler) Handle(c *gin.Context, cfg *config.Config) {
+	groupId := c.Param("id")
+	if groupId == "" {
+		c.AbortWithError(400, errors.New("invalid group id"))
+		return
+	}
+
+	userId, err := CtxGetUserId(c)
+	if err != nil {
+		c.AbortWithError(400, err)
+	}
+
+	group, err := a.o.GetGroupDetail(userId, groupId)
+	if err != nil {
+		c.AbortWithStatus(400)
+		return
+	}
+	c.JSON(200, group)
+}
+
+type GetFriendsHandler struct {
+	o orchestrator.ExpenseAppImpl
+}
+
+func (h *GetFriendsHandler) Method() Method {
+	return GET
+}
+
+func (h *GetFriendsHandler) Path() string {
+	return Path("/user/friends")
+}
+
+func (h *GetFriendsHandler) Handle(c *gin.Context, cfg *config.Config) {
+	userId, err := CtxGetUserId(c)
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+	friends, err := h.o.GetFriends(userId)
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+	c.JSON(200, friends)
 }

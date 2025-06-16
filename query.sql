@@ -72,13 +72,15 @@ SELECT group_id FROM expense_mapping WHERE expense_id = $1 AND group_id != NULL 
 DELETE FROM expense WHERE id = $1 RETURNING TRUE;
 
 -- name: FetchGroupExpenses :many
-SELECT e.*, jsonb_agg(em.user_id) AS participant_ids
+SELECT e.*
 FROM expense e
-JOIN expense_mapping em ON e.id = em.expense_id
-WHERE em.group_id = $1
-GROUP BY e.id
-ORDER BY e.created_at DESC
-LIMIT 20 OFFSET (($2 - 1) * 20);
+WHERE e.id IN (
+  SELECT DISTINCT em.expense_id
+  FROM expense_mapping em
+  WHERE em.group_id = $1
+  LIMIT $3 OFFSET (($2 - 1) * $3)
+)
+ORDER BY e.created_at DESC, (e.status = 'DRAFT') DESC;
 
 -- name: CheckUserExistsInGroup :one
 SELECT EXISTS(
@@ -116,13 +118,19 @@ WHERE (user_id = $1 AND friend_id = $2)
    RETURNING TRUE;  -- Remove friendship in both directions
 
 -- name: GetFriends :many
-SELECT u.id, u.name, u.email 
-FROM users u 
-JOIN friends f ON u.id = f.friend_id 
-WHERE f.user_id = $1 OR f.friend_id = $1;
+SELECT u.id, u.name, u.email, u.is_verified, u.created_at, u.updated_at
+FROM users u
+JOIN friends f ON u.id = f.friend_id
+WHERE f.user_id = $1;
 
 -- name: GetFriend :one
 SELECT u.id, u.name, u.email
 FROM users u
 JOIN friends f ON u.id = f.friend_id
 WHERE (f.user_id = $1 AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = $1);
+
+-- name: FetchExpenseCountByGroup :one
+SELECT COUNT(*) AS count
+FROM expense e
+JOIN expense_mapping em ON e.id = em.expense_id
+WHERE em.group_id = $1;

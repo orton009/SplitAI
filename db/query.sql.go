@@ -245,6 +245,20 @@ func (q *Queries) FetchExpenseAssociatedGroup(ctx context.Context, expenseID uui
 	return group_id, err
 }
 
+const fetchExpenseCountByGroup = `-- name: FetchExpenseCountByGroup :one
+SELECT COUNT(*) AS count
+FROM expense e
+JOIN expense_mapping em ON e.id = em.expense_id
+WHERE em.group_id = $1
+`
+
+func (q *Queries) FetchExpenseCountByGroup(ctx context.Context, groupID uuid.NullUUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, fetchExpenseCountByGroup, groupID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const fetchGroupById = `-- name: FetchGroupById :one
 SELECT id, name, description, admin_id FROM "group" WHERE id = $1 LIMIT 1
 `
@@ -262,43 +276,32 @@ func (q *Queries) FetchGroupById(ctx context.Context, id uuid.UUID) (Group, erro
 }
 
 const fetchGroupExpenses = `-- name: FetchGroupExpenses :many
-SELECT e.id, e.description, e.amount, e.split, e.status, e.settled_by, e.created_by, e.payee, e.created_at, e.updated_at, jsonb_agg(em.user_id) AS participant_ids
+SELECT e.id, e.description, e.amount, e.split, e.status, e.settled_by, e.created_by, e.payee, e.created_at, e.updated_at
 FROM expense e
-JOIN expense_mapping em ON e.id = em.expense_id
-WHERE em.group_id = $1
-GROUP BY e.id
-ORDER BY e.created_at DESC
-LIMIT 20 OFFSET (($2 - 1) * 20)
+WHERE e.id IN (
+  SELECT DISTINCT em.expense_id
+  FROM expense_mapping em
+  WHERE em.group_id = $1
+  LIMIT $3 OFFSET (($2 - 1) * $3)
+)
+ORDER BY e.created_at DESC, (e.status = 'DRAFT') DESC
 `
 
 type FetchGroupExpensesParams struct {
 	GroupID uuid.NullUUID
 	Column2 interface{}
+	Limit   int32
 }
 
-type FetchGroupExpensesRow struct {
-	ID             uuid.UUID
-	Description    sql.NullString
-	Amount         string
-	Split          json.RawMessage
-	Status         string
-	SettledBy      uuid.NullUUID
-	CreatedBy      uuid.NullUUID
-	Payee          json.RawMessage
-	CreatedAt      sql.NullTime
-	UpdatedAt      sql.NullTime
-	ParticipantIds json.RawMessage
-}
-
-func (q *Queries) FetchGroupExpenses(ctx context.Context, arg FetchGroupExpensesParams) ([]FetchGroupExpensesRow, error) {
-	rows, err := q.db.QueryContext(ctx, fetchGroupExpenses, arg.GroupID, arg.Column2)
+func (q *Queries) FetchGroupExpenses(ctx context.Context, arg FetchGroupExpensesParams) ([]Expense, error) {
+	rows, err := q.db.QueryContext(ctx, fetchGroupExpenses, arg.GroupID, arg.Column2, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FetchGroupExpensesRow
+	var items []Expense
 	for rows.Next() {
-		var i FetchGroupExpensesRow
+		var i Expense
 		if err := rows.Scan(
 			&i.ID,
 			&i.Description,
@@ -310,7 +313,6 @@ func (q *Queries) FetchGroupExpenses(ctx context.Context, arg FetchGroupExpenses
 			&i.Payee,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.ParticipantIds,
 		); err != nil {
 			return nil, err
 		}
@@ -461,16 +463,19 @@ func (q *Queries) GetFriend(ctx context.Context, arg GetFriendParams) (GetFriend
 
 const getFriends = `-- name: GetFriends :many
 
-SELECT u.id, u.name, u.email 
-FROM users u 
-JOIN friends f ON u.id = f.friend_id 
-WHERE f.user_id = $1 OR f.friend_id = $1
+SELECT u.id, u.name, u.email, u.is_verified, u.created_at, u.updated_at
+FROM users u
+JOIN friends f ON u.id = f.friend_id
+WHERE f.user_id = $1
 `
 
 type GetFriendsRow struct {
-	ID    uuid.UUID
-	Name  string
-	Email string
+	ID         uuid.UUID
+	Name       string
+	Email      string
+	IsVerified bool
+	CreatedAt  sql.NullTime
+	UpdatedAt  sql.NullTime
 }
 
 // Remove friendship in both directions
@@ -483,7 +488,14 @@ func (q *Queries) GetFriends(ctx context.Context, userID uuid.UUID) ([]GetFriend
 	var items []GetFriendsRow
 	for rows.Next() {
 		var i GetFriendsRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.Email); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.IsVerified,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

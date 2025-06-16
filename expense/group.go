@@ -7,17 +7,29 @@ type ExpenseSummary struct {
 	Owed map[int](map[int]float64)
 }
 
+type DetailedExpense struct {
+	Expense       Expense `json:"expense"`
+	TotalOwed     float64 `json:"totalOwed"`
+	TotalBorrowed float64 `json:"totalBorrowed"`
+}
+
+type StoredGroupExpenseHistory struct {
+	Expenses   []Expense `json:"expenses"`
+	PageNumber int       `json:"pageNumber"`
+	TotalPages int       `json:"totalPages"`
+}
+
 type GroupExpenseHistory struct {
-	Expenses   []Expense
-	PageNumber int
-	TotalPages int
+	Expenses   []DetailedExpense `json:"expenses"`
+	PageNumber int               `json:"pageNumber"`
+	TotalPages int               `json:"totalPages"`
 }
 
 type Group struct {
-	Id          string
-	Name        string
-	Description string
-	Admin       string
+	Id          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Admin       string `json:"admin"`
 }
 
 func (g *Group) getExpenseSummary() ExpenseSummary {

@@ -10,11 +10,11 @@ import (
 )
 
 type User struct {
-	ID         string
-	Name       string
-	Email      string
-	IsVerified bool
-	Password   string
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	IsVerified bool   `json:"isVerified"`
+	Password   string `json:"password"`
 }
 
 type Payer interface {
@@ -140,17 +140,17 @@ type ExpenseCreate struct {
 }
 
 type Expense struct {
-	ID             string
-	Description    string
-	Amount         float64
-	CreatedAt      time.Time
-	PayeeW         PayerWrapper
-	SplitW         SplitWrapper
-	Status         ExpenseStatus
-	IsGroupExpense bool
-	GroupId        string
-	SettledBy      string
-	CreatedBy      string
+	ID             string        `json:"id"`
+	Description    string        `json:"description"`
+	Amount         float64       `json:"amount"`
+	CreatedAt      time.Time     `json:"createdAt"`
+	PayeeW         PayerWrapper  `json:"payeeW"`
+	SplitW         SplitWrapper  `json:"splitW"`
+	Status         ExpenseStatus `json:"status"`
+	IsGroupExpense bool          `json:"isGroupExpense"`
+	GroupId        string        `json:"groupId"`
+	SettledBy      string        `json:"settledBy"`
+	CreatedBy      string        `json:"createdBy"`
 }
 
 // type Expense struct {

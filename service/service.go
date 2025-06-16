@@ -4,13 +4,23 @@ import (
 	expense "splitExpense/expense"
 )
 
-type UserHome struct {
-	AssociatedGroups []expense.Group
-	User             expense.User
-	TotalOwed        float64
-	TotalBorrowed    float64
-	// Friends          []expense.User
+type GroupWithExpense struct {
+	Group          expense.Group               `json:"group"`
+	ExpenseHistory expense.GroupExpenseHistory `json:"expenseHistory"`
+	TotalOwed      float64                     `json:"totalOwed"`
+	TotalBorrowed  float64                     `json:"totalBorrowed"`
 }
+
+type UserHome struct {
+	AssociatedGroups []GroupWithExpense `json:"associatedGroups"`
+	User             expense.User       `json:"user"`
+}
+
+type GroupDetail struct {
+	Group        GroupWithExpense `json:"group"`
+	GroupMembers []expense.User   `json:"groupMembers"`
+}
+
 type Service interface {
 	GetUserService() *UserService
 	GetExpenseService() *ExpenseService
@@ -28,6 +38,7 @@ type UserService interface {
 	GetAssociatedGroups(userId string) ([]expense.Group, error)
 	FetchUserCredentials(email string) (*expense.User, error)
 	GetAssociatedUsers(groupId string) (*AssociatedUsers, error)
+	GetGroupById(groupId string) (*expense.Group, error)
 }
 
 type ExpenseService interface {
@@ -36,5 +47,7 @@ type ExpenseService interface {
 	UpdateExpense(userId string, expense expense.Expense) (*expense.Expense, error)
 	DeleteExpense(userId string, expenseId string) (bool, error)
 	SettleExpense(userId string, expenseId string) (*expense.Expense, error)
+	FetchExpenseByGroup(userId string, groupId string, pageNumber int) (*expense.GroupExpenseHistory, error)
+	FetchExpenseCountByGroup(groupId string) (int, error)
 	// GetExpenseHistory(id string) (*expense.ExpenseHistory, error)
 }

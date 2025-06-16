@@ -28,3 +28,19 @@
 2. Persistent File Storage
 3. Relational Database
 4. KV DB/REDIS storage
+
+
+## Expense Metrics Overlook
+
+UserBorrow : how much user owes in that specific context
+userOwed : how much user borrowed in that specific context
+userLiable: userBorrow or userOwed
+
+context: current outstanding, only unsettled expenses.
+1. Add current userLiability in specific group expense. 
+2. show current userLiability in specific group
+3. show totalExpense of the group (current outstanding, only unsettled expenses)
+4. show totalExpense of group by time period (month range, date range, year range)
+
+// under consideration
+5. show current userLiability across all groups, overall owed/borrowed

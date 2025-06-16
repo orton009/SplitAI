@@ -114,6 +114,16 @@ type AssociatedUsers struct {
 	Users []expense.User
 }
 
+func (u *UserServiceImpl) GetGroupById(groupId string) (*expense.Group, error) {
+	group, err := u.storage.FetchGroupById(groupId)
+	if err != nil {
+
+		return nil, err
+	}
+
+	return group, nil
+}
+
 func (u *UserServiceImpl) GetAssociatedUsers(groupId string) (*AssociatedUsers, error) {
 	group, err := u.storage.FetchGroupById(groupId)
 	if err != nil {
@@ -121,6 +131,9 @@ func (u *UserServiceImpl) GetAssociatedUsers(groupId string) (*AssociatedUsers, 
 	}
 
 	users, err := u.storage.FetchUsersInGroup(groupId)
+	if err != nil {
+		return nil, err
+	}
 	return &AssociatedUsers{
 		Group: *group,
 		Users: users,

@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"crypto"
 	"encoding/base64"
+	"fmt"
 	"math"
 	"splitExpense/config"
 	"splitExpense/expense"
@@ -66,7 +67,7 @@ func (e *ExpenseAppImpl) JoinGroup(userId, newMemberId, groupId string) (bool, e
 	if err != nil {
 		return false, expense.ErrService(err.Error())
 	}
-	ok, err := e.userService.JoinGroup(userId, groupId)
+	ok, err := e.userService.JoinGroup(newMemberId, groupId)
 	if err != nil {
 		return false, expense.ErrService(err.Error())
 	}
@@ -126,6 +127,7 @@ func (e *ExpenseAppImpl) CreateExpense(userId string, exp expense.ExpenseCreate)
 	}
 
 	if !e.verifyAmount(exp.Amount, exp.SplitW.Split.ComputeTotal()) {
+		fmt.Println("amount: ", exp.Amount, exp.SplitW.Split.ComputeTotal(), exp.SplitW.Split.GetPayeeSplit())
 		return nil, expense.ErrValidation("split amount is not same as expense amount")
 	}
 
@@ -231,8 +233,70 @@ func (e *ExpenseAppImpl) Login(email, password string) (*expense.User, error) {
 }
 
 // Implement GetUserHome to satisfy ExpenseApp interface
-func (e *ExpenseAppImpl) GetUserHome() service.UserHome {
-	return service.UserHome{}
+func (e *ExpenseAppImpl) GetUserHome(userId string) (service.UserHome, error) {
+	var home service.UserHome
+	user, err := e.userService.GetUser(userId)
+	if err != nil {
+		return home, err
+	}
+
+	groups, err := e.userService.GetAssociatedGroups(userId)
+	if err != nil {
+		return home, err
+	}
+
+	expGroups := []service.GroupWithExpense{}
+
+	for _, group := range groups {
+		// TODO: add go routines
+		exp, err := e.expenseService.FetchExpenseByGroup(userId, group.Id, 0)
+		if err != nil {
+			return home, err
+		}
+		totalOwed, totalBorrowed := calculateUserLiability(exp)
+		expGroups = append(expGroups, service.GroupWithExpense{
+			Group:          group,
+			ExpenseHistory: *exp,
+			TotalOwed:      totalOwed,
+			TotalBorrowed:  totalBorrowed,
+		})
+
+	}
+
+	return service.UserHome{AssociatedGroups: expGroups, User: *user}, nil
+}
+
+func (e *ExpenseAppImpl) GetGroupDetail(userId string, groupId string) (service.GroupDetail, error) {
+	var detail service.GroupDetail
+
+	group, err := e.userService.GetGroupById(groupId)
+	if err != nil {
+		return detail, err
+	}
+
+	users, err := e.userService.GetAssociatedUsers(groupId)
+	if err != nil {
+		return detail, err
+	}
+
+	expHistory, err := e.expenseService.FetchExpenseByGroup(userId, groupId, 0)
+	if err != nil {
+		return detail, err
+	}
+
+	totalOwed, totalBorrowed := calculateUserLiability(expHistory)
+
+	detail = service.GroupDetail{
+		Group: service.GroupWithExpense{
+			Group:          *group,
+			ExpenseHistory: *expHistory,
+			TotalOwed:      totalOwed,
+			TotalBorrowed:  totalBorrowed,
+		},
+		GroupMembers: users.Users,
+	}
+
+	return detail, nil
 }
 
 // NewExpenseApp creates an ExpenseAppImpl and mocks or creates service dependencies internally
@@ -246,4 +310,25 @@ func NewExpenseApp(ctx context.Context, cfg *config.Config) ExpenseAppImpl {
 		expenseService: expenseService,
 		config:         *cfg,
 	}
+}
+
+func (e *ExpenseAppImpl) GetFriends(userId string) ([]expense.User, error) {
+	return e.userService.GetFriends(userId)
+}
+
+func calculateUserLiability(g *expense.GroupExpenseHistory) (totalOwed, totalBorrowed float64) {
+	totalOwed, totalBorrowed = 0.0, 0.0
+
+	for _, exp := range g.Expenses {
+		totalBorrowed += exp.TotalBorrowed
+		totalOwed += exp.TotalOwed
+	}
+
+	if totalOwed > totalBorrowed {
+		totalOwed -= totalBorrowed
+	} else {
+		totalBorrowed -= totalOwed
+	}
+
+	return
 }

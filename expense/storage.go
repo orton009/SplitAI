@@ -26,11 +26,12 @@ type Storage interface {
 
 	FetchUsersInGroup(groupId string) ([]User, error)
 	FetchGroupById(id string) (*Group, error)
-	FetchGroupExpenses(groupId string, pageNumber int) ([]GroupExpenseHistory, error)
+	FetchGroupExpenses(groupId string, pageNumber int) (*StoredGroupExpenseHistory, error)
 	CreateOrUpdateGroup(group Group) (*Group, error)
 	AddUserInGroup(userId string, groupId string) (bool, error)
 	RemoveUserFromGroup(userId string, groupId string) (bool, error)
 
+	FetchExpenseCountByGroup(groupId string) (int, error)
 	CreateOrUpdateExpense(expense Expense) (*Expense, error)
 	FetchExpense(id string) (*Expense, error)
 	FetchExpenseAssociatedGroup(expenseId string) (ok bool, groupId string, err error)
