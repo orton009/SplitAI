@@ -4,6 +4,14 @@ import (
 	expense "splitExpense/expense"
 )
 
+type UserExpenses struct {
+	Expenses      []expense.DetailedExpense `json:"expenses"`
+	TotalOwed     float64                   `json:"totalOwed"`
+	TotalBorrowed float64                   `json:"totalBorrowed"`
+	PageNumber    int                       `json:"pageNumber"`
+	TotalPages    int                       `json:"totalPages"`
+}
+
 type GroupWithExpense struct {
 	Group          expense.Group               `json:"group"`
 	ExpenseHistory expense.GroupExpenseHistory `json:"expenseHistory"`
@@ -12,8 +20,10 @@ type GroupWithExpense struct {
 }
 
 type UserHome struct {
-	AssociatedGroups []GroupWithExpense `json:"associatedGroups"`
-	User             expense.User       `json:"user"`
+	AssociatedGroups  []GroupWithExpense `json:"associatedGroups"`
+	User              expense.User       `json:"user"`
+	UserTotalOwed     float64            `json:"userTotalOwed"`
+	UserTotalBorrowed float64            `json:"userTotalBorrowed"`
 }
 
 type GroupDetail struct {
@@ -49,5 +59,6 @@ type ExpenseService interface {
 	SettleExpense(userId string, expenseId string) (*expense.Expense, error)
 	FetchExpenseByGroup(userId string, groupId string, pageNumber int) (*expense.GroupExpenseHistory, error)
 	FetchExpenseCountByGroup(groupId string) (int, error)
+	FetchActiveUserExpenses(userId string, pageNumber int) (*expense.GroupExpenseHistory, error)
 	// GetExpenseHistory(id string) (*expense.ExpenseHistory, error)
 }

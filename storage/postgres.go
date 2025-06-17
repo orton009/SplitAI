@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/rs/zerolog"
+	"github.com/samber/lo"
 
 	sqldblogger "github.com/simukti/sqldb-logger"
 	"github.com/simukti/sqldb-logger/logadapter/zerologadapter"
@@ -204,6 +205,9 @@ func (d *DBStorage) FetchGroupExpenses(groupId string, pageNumber int) (*models.
 		Column2: pageNumber,
 		Limit:   20,
 	})
+	fmt.Println("rows: ", lo.Map(rows, func(r db.Expense, _ int) string {
+		return r.Status
+	}))
 	if err != nil {
 		return nil, err
 	}
@@ -537,4 +541,44 @@ func (d *DBStorage) FetchExpenseCountByGroup(groupId string) (int, error) {
 		return 0, err
 	}
 	return int(count), nil
+}
+
+func (d *DBStorage) FetchExpenseByUserAndStatus(userId string, status models.ExpenseStatus, pageNumber int, limit int32) (*models.StoredGroupExpenseHistory, error) {
+	if pageNumber == 0 {
+		pageNumber = 1
+	}
+
+	uid, _ := uuid.Parse(userId)
+	rows, err := d.queries.FetchExpenseByUserAndStatus(*d.ctx, db.FetchExpenseByUserAndStatusParams{
+		UserID:  uid,
+		Status:  string(status),
+		Column4: pageNumber,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := models.StoredGroupExpenseHistory{Expenses: []models.Expense{}, PageNumber: pageNumber, TotalPages: 1}
+	for _, row := range rows {
+		amount, _ := strconv.ParseFloat(row.Amount, 64)
+		var splitW models.SplitWrapper
+		_ = json.Unmarshal(row.Split, &splitW)
+		var payeeW models.PayerWrapper
+		_ = json.Unmarshal(row.Payee, &payeeW)
+		result.Expenses = append(result.Expenses, models.Expense{
+			ID:             row.ID.String(),
+			Description:    row.Description.String,
+			Amount:         amount,
+			Status:         models.ExpenseStatus(row.Status),
+			CreatedBy:      row.CreatedBy.UUID.String(),
+			SettledBy:      row.SettledBy.UUID.String(),
+			CreatedAt:      row.CreatedAt.Time,
+			SplitW:         splitW,
+			PayeeW:         payeeW,
+			IsGroupExpense: false,
+			GroupId:        "",
+		})
+	}
+	return &result, nil
 }

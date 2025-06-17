@@ -80,7 +80,7 @@ WHERE e.id IN (
   WHERE em.group_id = $1
   LIMIT $3 OFFSET (($2 - 1) * $3)
 )
-ORDER BY e.created_at DESC, (e.status = 'DRAFT') DESC;
+ORDER BY (e.status='DRAFT') DESC, e.created_at ASC;
 
 -- name: CheckUserExistsInGroup :one
 SELECT EXISTS(
@@ -134,3 +134,10 @@ SELECT COUNT(*) AS count
 FROM expense e
 JOIN expense_mapping em ON e.id = em.expense_id
 WHERE em.group_id = $1;
+
+-- name: FetchExpenseByUserAndStatus :many
+SELECT e.* from expense_mapping em
+JOIN expense e ON em.expense_id = e.id
+where em.user_id = $1 AND e.status = $2
+ORDER BY e.created_at DESC
+LIMIT $3 OFFSET (($4 - 1) * $3);

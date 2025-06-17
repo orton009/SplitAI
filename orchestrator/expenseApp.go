@@ -150,6 +150,10 @@ func (e *ExpenseAppImpl) UpdateExpense(userId string, exp expense.Expense) (*exp
 		return nil, expense.ErrValidation("expense not found")
 	}
 
+	if existingExp.Status != expense.ExpenseDraft {
+		return nil, expense.ErrValidation("expense is not in draft state, cannot update")
+	}
+
 	// check is user is allowed to update expense
 	// only group members or expense members or expense creator is allowed
 	userAllowed := existingExp.CreatedBy == userId
@@ -263,7 +267,34 @@ func (e *ExpenseAppImpl) GetUserHome(userId string) (service.UserHome, error) {
 
 	}
 
+	// userExp, err := e.expenseService.FetchActiveUserExpenses(userId, 0)
+	// if err != nil {
+	// 	return home, err
+	// }
+	// userTotalOwed, userTotalBorrowed := calculateUserLiability(userExp)
+
 	return service.UserHome{AssociatedGroups: expGroups, User: *user}, nil
+}
+
+func (e *ExpenseAppImpl) GetUserExpenseHistory(userId string, pageNumber int) (*service.UserExpenses, error) {
+
+	// Fetch active user expenses
+	expHistory, err := e.expenseService.FetchActiveUserExpenses(userId, pageNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	totalOwed, totalBorrowed := calculateUserLiability(expHistory)
+
+	history := service.UserExpenses{
+		Expenses:      expHistory.Expenses,
+		TotalOwed:     totalOwed,
+		TotalBorrowed: totalBorrowed,
+		PageNumber:    expHistory.PageNumber,
+		TotalPages:    expHistory.TotalPages,
+	}
+
+	return &history, nil
 }
 
 func (e *ExpenseAppImpl) GetGroupDetail(userId string, groupId string) (service.GroupDetail, error) {

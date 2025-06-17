@@ -88,6 +88,10 @@ type ApiHandler struct {
 func routeMap(o orchestrator.ExpenseAppImpl) []ApiHandler {
 	return []ApiHandler{
 		{
+			handle:      &SettleExpenseHandler{orchestrator: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
+		{
 			handle: &LoginRouteHandler{orchestrator: o},
 		},
 		{
@@ -109,10 +113,7 @@ func routeMap(o orchestrator.ExpenseAppImpl) []ApiHandler {
 			handle:      &CreateOrUpdateExpenseRouteHandler{orchestrator: o},
 			PreHandlers: []gin.HandlerFunc{Authenticate},
 		},
-		{
-			handle:      &SettleExpenseHandler{orchestrator: o},
-			PreHandlers: []gin.HandlerFunc{Authenticate},
-		},
+
 		{
 			handle:      &JoinGroupRouteHandler{orchestrator: o},
 			PreHandlers: []gin.HandlerFunc{Authenticate},
@@ -127,6 +128,12 @@ func routeMap(o orchestrator.ExpenseAppImpl) []ApiHandler {
 		},
 		{
 			handle:      &GetFriendsHandler{o: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
+		{
+			handle: &UserExpensesHandler{
+				o: o,
+			},
 			PreHandlers: []gin.HandlerFunc{Authenticate},
 		},
 	}

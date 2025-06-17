@@ -5,6 +5,7 @@ import (
 	"splitExpense/config"
 	"splitExpense/expense"
 	"splitExpense/orchestrator"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -112,11 +113,10 @@ func (h *SettleExpenseHandler) Method() Method {
 }
 
 func (h *SettleExpenseHandler) Path() string {
-	return "/expense/:id/settle"
+	return Path("/expense/:id/settle")
 }
 
 func (h *SettleExpenseHandler) Handle(c *gin.Context, cfg *config.Config) {
-
 	userId, err := CtxGetUserId(c)
 	if err != nil {
 		c.Status(500)
@@ -130,4 +130,35 @@ func (h *SettleExpenseHandler) Handle(c *gin.Context, cfg *config.Config) {
 	}
 
 	c.Status(201)
+}
+
+type UserExpensesHandler struct {
+	o orchestrator.ExpenseAppImpl
+}
+
+func (h *UserExpensesHandler) Method() Method {
+	return GET
+}
+
+func (h *UserExpensesHandler) Path() string {
+	return Path("/expenses")
+}
+
+func (h *UserExpensesHandler) Handle(c *gin.Context, cfg *config.Config) {
+	userId, err := CtxGetUserId(c)
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	pageNumber := c.Query("pageNumber")
+	page, _ := strconv.Atoi(pageNumber)
+
+	history, err := h.o.GetUserExpenseHistory(userId, page)
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	c.JSON(200, history)
 }

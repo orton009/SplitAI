@@ -245,6 +245,60 @@ func (q *Queries) FetchExpenseAssociatedGroup(ctx context.Context, expenseID uui
 	return group_id, err
 }
 
+const fetchExpenseByUserAndStatus = `-- name: FetchExpenseByUserAndStatus :many
+SELECT e.id, e.description, e.amount, e.split, e.status, e.settled_by, e.created_by, e.payee, e.created_at, e.updated_at from expense_mapping em
+JOIN expense e ON em.expense_id = e.id
+where em.user_id = $1 AND e.status = $2
+ORDER BY e.created_at DESC
+LIMIT $3 OFFSET (($4 - 1) * $3)
+`
+
+type FetchExpenseByUserAndStatusParams struct {
+	UserID  uuid.UUID
+	Status  string
+	Limit   int32
+	Column4 interface{}
+}
+
+func (q *Queries) FetchExpenseByUserAndStatus(ctx context.Context, arg FetchExpenseByUserAndStatusParams) ([]Expense, error) {
+	rows, err := q.db.QueryContext(ctx, fetchExpenseByUserAndStatus,
+		arg.UserID,
+		arg.Status,
+		arg.Limit,
+		arg.Column4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Expense
+	for rows.Next() {
+		var i Expense
+		if err := rows.Scan(
+			&i.ID,
+			&i.Description,
+			&i.Amount,
+			&i.Split,
+			&i.Status,
+			&i.SettledBy,
+			&i.CreatedBy,
+			&i.Payee,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const fetchExpenseCountByGroup = `-- name: FetchExpenseCountByGroup :one
 SELECT COUNT(*) AS count
 FROM expense e
@@ -284,7 +338,7 @@ WHERE e.id IN (
   WHERE em.group_id = $1
   LIMIT $3 OFFSET (($2 - 1) * $3)
 )
-ORDER BY e.created_at DESC, (e.status = 'DRAFT') DESC
+ORDER BY (e.status='DRAFT') DESC, e.created_at ASC
 `
 
 type FetchGroupExpensesParams struct {

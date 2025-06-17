@@ -39,4 +39,6 @@ type Storage interface {
 	AttachExpenseToGroup(expenseId string, groupId string, users []string) (bool, error)
 	RemoveUserFromExpense(expenseId string, usersToRemove []string) (bool, error)
 	DeleteExpense(id string) (bool, error)
+
+	FetchExpenseByUserAndStatus(userId string, status ExpenseStatus, pageNumber int, limit int32) (*StoredGroupExpenseHistory, error)
 }

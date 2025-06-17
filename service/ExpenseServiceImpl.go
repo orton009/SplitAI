@@ -143,6 +143,7 @@ func (e *ExpenseServiceImpl) SettleExpense(userId string, expenseId string) (*ex
 		return nil, err
 	}
 	Expense.Status = expense.ExpenseSettled
+	Expense.SettledBy = userId
 	updatedData, err := e.storage.CreateOrUpdateExpense(*Expense)
 	if err != nil {
 		return nil, err
@@ -208,4 +209,29 @@ func (e *ExpenseServiceImpl) FetchExpenseCountByGroup(groupId string) (int, erro
 		return 0, err
 	}
 	return e.storage.FetchExpenseCountByGroup(groupId)
+}
+
+func (e *ExpenseServiceImpl) FetchActiveUserExpenses(userId string, pageNumber int) (*expense.GroupExpenseHistory, error) {
+	if pageNumber == 0 {
+		pageNumber = 1
+	}
+
+	stored, err := e.storage.FetchExpenseByUserAndStatus(userId, expense.ExpenseDraft, pageNumber, 100)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &expense.GroupExpenseHistory{Expenses: []expense.DetailedExpense{}, PageNumber: stored.PageNumber, TotalPages: stored.TotalPages}
+
+	for _, exp := range stored.Expenses {
+		payed := exp.PayeeW.Payer.GetPayers()[userId]
+		borrowed := exp.SplitW.Split.GetPayeeSplit()[userId]
+		if payed > borrowed {
+			result.Expenses = append(result.Expenses, expense.DetailedExpense{Expense: exp, TotalOwed: payed - borrowed})
+		} else if payed < borrowed {
+			result.Expenses = append(result.Expenses, expense.DetailedExpense{Expense: exp, TotalBorrowed: borrowed - payed})
+		}
+	}
+
+	return result, nil
 }
