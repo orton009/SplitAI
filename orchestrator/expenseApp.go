@@ -357,8 +357,10 @@ func calculateUserLiability(g *expense.GroupExpenseHistory) (totalOwed, totalBor
 
 	if totalOwed > totalBorrowed {
 		totalOwed -= totalBorrowed
+		totalBorrowed = 0.0
 	} else {
 		totalBorrowed -= totalOwed
+		totalOwed = 0.0
 	}
 
 	return
