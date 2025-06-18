@@ -136,6 +136,10 @@ func routeMap(o orchestrator.ExpenseAppImpl) []ApiHandler {
 			},
 			PreHandlers: []gin.HandlerFunc{Authenticate},
 		},
+		{
+			handle:      &DeleteGroupRouteHandler{o: o},
+			PreHandlers: []gin.HandlerFunc{Authenticate},
+		},
 	}
 }
 

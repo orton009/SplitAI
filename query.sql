@@ -141,3 +141,6 @@ LIMIT $3 OFFSET (($4 - 1) * $3);
 SELECT COUNT(*) AS count FROM expense_mapping em
 JOIN expense e ON em.expense_id = e.id
 WHERE em.user_id = $1 AND e.status = $2;
+
+-- name: DeleteGroup :one
+DELETE FROM "group" WHERE id = $1 RETURNING TRUE;

@@ -85,7 +85,7 @@ func (d *DeleteExpenseRouteHandler) Method() Method {
 }
 
 func (d *DeleteExpenseRouteHandler) Path() string {
-	return "/expense/:id"
+	return Path("/expense/:id")
 }
 
 func (d *DeleteExpenseRouteHandler) Handle(c *gin.Context, cfg *config.Config) {

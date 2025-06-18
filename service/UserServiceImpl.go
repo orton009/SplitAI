@@ -157,3 +157,7 @@ func (us *UserServiceImpl) GetFriend(userId string, friendId string) (*expense.U
 
 	return us.storage.GetFriend(userId, friendId)
 }
+
+func (us *UserServiceImpl) DeleteGroup(groupId string) (bool, error) {
+	return us.storage.DeleteGroup(groupId)
+}

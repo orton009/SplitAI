@@ -42,3 +42,14 @@ context: current outstanding, only unsettled expenses.
 3. show totalExpense of the group (current outstanding, only unsettled expenses)
 4. show totalExpense of group by time period (month range, date range, year range)
 5. show current userLiability across all groups, overall owed/borrowed
+
+
+### NEXT TO PICK UP
+1. Add leave group logic, what if admin leaves ? new admin ? 
+2. Add remove friend on frontend
+3. Add show more on scrollable paginated api calls on frontend, test paginated calls
+
+1. Add DB Transaction Locking in places
+2. Add go routines for parallel processing (heavy calculations)
+3. Remove any business/data Logic from storage layer apart from transformation required for storage
+4. Remove any business logic from service, it should only have extra logic required for transformation/combination/db level validations. 

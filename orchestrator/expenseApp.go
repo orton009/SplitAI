@@ -218,6 +218,24 @@ func (e *ExpenseAppImpl) DeleteExpense(userId string, expenseId string) (bool, e
 	return e.expenseService.DeleteExpense(userId, expenseId)
 }
 
+func (e *ExpenseAppImpl) DeleteGroup(userId string, groupId string) (bool, error) {
+	// user should be part of group to delete the group, user can be just the member of splitDetails but should be part of group if its a group expense.
+	validator := NewValidator().NonEmptyID(userId).NonEmptyID(groupId)
+	if !validator.Ok() {
+		return false, validator.Err()
+	}
+	group, err := e.userService.GetGroupById(groupId)
+	if group.Admin != userId {
+		return false, expense.ErrValidation("user is not admin of the group, cannot delete group")
+	}
+
+	ok, err := e.userService.DeleteGroup(groupId)
+	if err != nil {
+		return false, expense.ErrService(err.Error())
+	}
+	return ok, nil
+}
+
 func (e *ExpenseAppImpl) SettleExpense(userId string, expenseId string) (*expense.Expense, error) {
 	// user should be part of group if group expense, user should always be part of expense or creator of expense.
 	return e.expenseService.SettleExpense(userId, expenseId)

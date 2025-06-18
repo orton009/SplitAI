@@ -44,6 +44,7 @@ type UserService interface {
 	GetFriend(userId string, friendId string) (*expense.User, error)
 	JoinGroup(userId string, groupId string) (bool, error)
 	LeaveGroup(userId string, groupId string) (bool, error)
+	DeleteGroup(groupId string) (bool, error)
 	CreateGroup(userId string, name string, description string) (*expense.Group, error)
 	GetAssociatedGroups(userId string) ([]expense.Group, error)
 	FetchUserCredentials(email string) (*expense.User, error)

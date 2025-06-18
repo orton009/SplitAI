@@ -196,6 +196,17 @@ func (q *Queries) DeleteExpense(ctx context.Context, id uuid.UUID) (bool, error)
 	return column_1, err
 }
 
+const deleteGroup = `-- name: DeleteGroup :one
+DELETE FROM "group" WHERE id = $1 RETURNING TRUE
+`
+
+func (q *Queries) DeleteGroup(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRowContext(ctx, deleteGroup, id)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const fetchExpense = `-- name: FetchExpense :one
 SELECT id, description, amount, split, status, settled_by, created_by, payee, group_id, created_at, updated_at FROM expense WHERE id = $1 LIMIT 1
 `

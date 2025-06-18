@@ -600,3 +600,15 @@ func (d *DBStorage) FetchGroupExpensesByStatus(groupId string, status models.Exp
 	return d.GetStoredGroupExpenseFromRows(rows, pageNumber, int(totalPages))
 
 }
+
+func (d *DBStorage) DeleteGroup(groupId string) (bool, error) {
+	gid, err := uuid.Parse(groupId)
+	if err != nil {
+		return false, err
+	}
+	deleted, err := d.queries.DeleteGroup(*d.ctx, gid)
+	if err == nil || err == sql.ErrNoRows {
+		return deleted, nil
+	}
+	return false, nil
+}

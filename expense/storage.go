@@ -24,6 +24,8 @@ type Storage interface {
 	GetFriends(userId string) ([]User, error)
 	RemoveFriend(userId string, friendId string) (bool, error)
 
+	DeleteGroup(groupId string) (bool, error)
+
 	FetchGroupMembers(groupId string) ([]User, error)
 	FetchGroupById(id string) (*Group, error)
 	FetchGroupExpenses(groupId string, pageNumber int) (*StoredGroupExpenseHistory, error)

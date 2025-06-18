@@ -1,6 +1,7 @@
 package apiServer
 
 import (
+	"errors"
 	"splitExpense/config"
 	"splitExpense/orchestrator"
 
@@ -111,5 +112,40 @@ func (h *LeaveGroupRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 		return
 	}
 	// response
-	c.Status(201)
+	c.JSON(201, gin.H{})
+}
+
+type DeleteGroupRouteHandler struct {
+	o orchestrator.ExpenseAppImpl
+}
+
+func (h *DeleteGroupRouteHandler) Method() Method {
+
+	return DELETE
+}
+
+func (h *DeleteGroupRouteHandler) Path() string {
+	return Path("/group/:id")
+}
+
+func (h *DeleteGroupRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
+	groupId := c.Param("id")
+	if groupId == "" {
+		c.AbortWithError(400, errors.New("invalid group id"))
+		return
+	}
+
+	userId, err := CtxGetUserId(c)
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	ok, err := h.o.DeleteGroup(userId, groupId)
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	c.JSON(201, gin.H{"deleted": ok})
 }
