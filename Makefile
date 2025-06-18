@@ -1,6 +1,6 @@
 # Paths
 BINARY_NAME=bin/splitExpense
-SQLC_CONFIG=sqlc.yaml
+SQLC_CONFIG=sqlc.json
 
 # Commands
 GO=go
@@ -9,7 +9,11 @@ AIR=air
 
 .PHONY: all build run dev sqlc clean tidy fmt
 
-all: build
+all: 
+	install-sqlc
+	sqlc
+	build
+
 
 # Build the Go binary
 build:
@@ -25,6 +29,10 @@ run: build
 dev:
 	@echo ">> Starting Air (live reload)..."
 	$(AIR)
+
+install-sqlc: 
+	@echo ">> Installing sqlc..."
+	$(GO) install github.com/kyleconroy/sqlc/cmd/sqlc@latest
 
 # Generate code using sqlc
 sqlc:
