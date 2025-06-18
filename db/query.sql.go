@@ -71,26 +71,6 @@ func (q *Queries) AddUserInGroup(ctx context.Context, arg AddUserInGroupParams) 
 	return column_1, err
 }
 
-const attachExpenseToGroup = `-- name: AttachExpenseToGroup :one
-INSERT INTO expense_mapping (expense_id, group_id, user_id)
-SELECT $1, $2, unnest($3::uuid[])
-ON CONFLICT DO NOTHING
-RETURNING TRUE
-`
-
-type AttachExpenseToGroupParams struct {
-	ExpenseID uuid.UUID
-	GroupID   uuid.NullUUID
-	Column3   []uuid.UUID
-}
-
-func (q *Queries) AttachExpenseToGroup(ctx context.Context, arg AttachExpenseToGroupParams) (bool, error) {
-	row := q.db.QueryRowContext(ctx, attachExpenseToGroup, arg.ExpenseID, arg.GroupID, pq.Array(arg.Column3))
-	var column_1 bool
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const checkUserExistsInGroup = `-- name: CheckUserExistsInGroup :one
 SELECT EXISTS(
     SELECT 1 FROM group_members
@@ -111,8 +91,8 @@ func (q *Queries) CheckUserExistsInGroup(ctx context.Context, arg CheckUserExist
 }
 
 const createOrUpdateExpense = `-- name: CreateOrUpdateExpense :one
-INSERT INTO expense (id, description, amount, split, status, settled_by, created_by, payee, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO expense (id, description, amount, split, status, settled_by, created_by, payee, created_at, updated_at, group_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (id) DO UPDATE SET
     description = EXCLUDED.description,
     amount = EXCLUDED.amount,
@@ -121,8 +101,9 @@ ON CONFLICT (id) DO UPDATE SET
     settled_by = EXCLUDED.settled_by,
     created_by = EXCLUDED.created_by,
     payee = EXCLUDED.payee,
-    updated_at = NOW() AT TIME ZONE 'Asia/Kolkata'
-RETURNING id, description, amount, split, status, settled_by, created_by, payee, created_at, updated_at
+    updated_at = NOW() AT TIME ZONE 'Asia/Kolkata',
+    group_id = EXCLUDED.group_id
+RETURNING id, description, amount, split, status, settled_by, created_by, payee, group_id, created_at, updated_at
 `
 
 type CreateOrUpdateExpenseParams struct {
@@ -132,10 +113,11 @@ type CreateOrUpdateExpenseParams struct {
 	Split       json.RawMessage
 	Status      string
 	SettledBy   uuid.NullUUID
-	CreatedBy   uuid.NullUUID
+	CreatedBy   uuid.UUID
 	Payee       json.RawMessage
 	CreatedAt   sql.NullTime
 	UpdatedAt   sql.NullTime
+	GroupID     uuid.NullUUID
 }
 
 func (q *Queries) CreateOrUpdateExpense(ctx context.Context, arg CreateOrUpdateExpenseParams) (Expense, error) {
@@ -150,6 +132,7 @@ func (q *Queries) CreateOrUpdateExpense(ctx context.Context, arg CreateOrUpdateE
 		arg.Payee,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.GroupID,
 	)
 	var i Expense
 	err := row.Scan(
@@ -161,6 +144,7 @@ func (q *Queries) CreateOrUpdateExpense(ctx context.Context, arg CreateOrUpdateE
 		&i.SettledBy,
 		&i.CreatedBy,
 		&i.Payee,
+		&i.GroupID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -213,7 +197,7 @@ func (q *Queries) DeleteExpense(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
 const fetchExpense = `-- name: FetchExpense :one
-SELECT id, description, amount, split, status, settled_by, created_by, payee, created_at, updated_at FROM expense WHERE id = $1 LIMIT 1
+SELECT id, description, amount, split, status, settled_by, created_by, payee, group_id, created_at, updated_at FROM expense WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) FetchExpense(ctx context.Context, id uuid.UUID) (Expense, error) {
@@ -228,25 +212,15 @@ func (q *Queries) FetchExpense(ctx context.Context, id uuid.UUID) (Expense, erro
 		&i.SettledBy,
 		&i.CreatedBy,
 		&i.Payee,
+		&i.GroupID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const fetchExpenseAssociatedGroup = `-- name: FetchExpenseAssociatedGroup :one
-SELECT group_id FROM expense_mapping WHERE expense_id = $1 AND group_id != NULL LIMIT 1
-`
-
-func (q *Queries) FetchExpenseAssociatedGroup(ctx context.Context, expenseID uuid.UUID) (uuid.NullUUID, error) {
-	row := q.db.QueryRowContext(ctx, fetchExpenseAssociatedGroup, expenseID)
-	var group_id uuid.NullUUID
-	err := row.Scan(&group_id)
-	return group_id, err
-}
-
 const fetchExpenseByUserAndStatus = `-- name: FetchExpenseByUserAndStatus :many
-SELECT e.id, e.description, e.amount, e.split, e.status, e.settled_by, e.created_by, e.payee, e.created_at, e.updated_at from expense_mapping em
+SELECT e.id, e.description, e.amount, e.split, e.status, e.settled_by, e.created_by, e.payee, e.group_id, e.created_at, e.updated_at from expense_mapping em
 JOIN expense e ON em.expense_id = e.id
 where em.user_id = $1 AND e.status = $2
 ORDER BY e.created_at DESC
@@ -283,6 +257,7 @@ func (q *Queries) FetchExpenseByUserAndStatus(ctx context.Context, arg FetchExpe
 			&i.SettledBy,
 			&i.CreatedBy,
 			&i.Payee,
+			&i.GroupID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -300,14 +275,45 @@ func (q *Queries) FetchExpenseByUserAndStatus(ctx context.Context, arg FetchExpe
 }
 
 const fetchExpenseCountByGroup = `-- name: FetchExpenseCountByGroup :one
-SELECT COUNT(*) AS count
-FROM expense e
-JOIN expense_mapping em ON e.id = em.expense_id
-WHERE em.group_id = $1
+SELECT COUNT(*) AS count FROM expense WHERE group_id = $1 AND group_id IS NOT NULL
 `
 
 func (q *Queries) FetchExpenseCountByGroup(ctx context.Context, groupID uuid.NullUUID) (int64, error) {
 	row := q.db.QueryRowContext(ctx, fetchExpenseCountByGroup, groupID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const fetchExpenseCountByGroupAndStatus = `-- name: FetchExpenseCountByGroupAndStatus :one
+SELECT COUNT(*) AS count FROM expense WHERE group_id = $1 AND status = $2 AND group_id IS NOT NULL
+`
+
+type FetchExpenseCountByGroupAndStatusParams struct {
+	GroupID uuid.NullUUID
+	Status  string
+}
+
+func (q *Queries) FetchExpenseCountByGroupAndStatus(ctx context.Context, arg FetchExpenseCountByGroupAndStatusParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, fetchExpenseCountByGroupAndStatus, arg.GroupID, arg.Status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const fetchExpenseCountByUserAndStatus = `-- name: FetchExpenseCountByUserAndStatus :one
+SELECT COUNT(*) AS count FROM expense_mapping em
+JOIN expense e ON em.expense_id = e.id
+WHERE em.user_id = $1 AND e.status = $2
+`
+
+type FetchExpenseCountByUserAndStatusParams struct {
+	UserID uuid.UUID
+	Status string
+}
+
+func (q *Queries) FetchExpenseCountByUserAndStatus(ctx context.Context, arg FetchExpenseCountByUserAndStatusParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, fetchExpenseCountByUserAndStatus, arg.UserID, arg.Status)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -330,15 +336,11 @@ func (q *Queries) FetchGroupById(ctx context.Context, id uuid.UUID) (Group, erro
 }
 
 const fetchGroupExpenses = `-- name: FetchGroupExpenses :many
-SELECT e.id, e.description, e.amount, e.split, e.status, e.settled_by, e.created_by, e.payee, e.created_at, e.updated_at
+SELECT e.id, e.description, e.amount, e.split, e.status, e.settled_by, e.created_by, e.payee, e.group_id, e.created_at, e.updated_at
 FROM expense e
-WHERE e.id IN (
-  SELECT DISTINCT em.expense_id
-  FROM expense_mapping em
-  WHERE em.group_id = $1
-  LIMIT $3 OFFSET (($2 - 1) * $3)
-)
-ORDER BY (e.status='DRAFT') DESC, e.created_at ASC
+WHERE e.group_id = $1
+ORDER BY e.created_at DESC
+LIMIT $3 OFFSET (($2 - 1) * $3)
 `
 
 type FetchGroupExpensesParams struct {
@@ -365,6 +367,99 @@ func (q *Queries) FetchGroupExpenses(ctx context.Context, arg FetchGroupExpenses
 			&i.SettledBy,
 			&i.CreatedBy,
 			&i.Payee,
+			&i.GroupID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const fetchGroupExpensesByStatus = `-- name: FetchGroupExpensesByStatus :many
+SELECT e.id, e.description, e.amount, e.split, e.status, e.settled_by, e.created_by, e.payee, e.group_id, e.created_at, e.updated_at 
+FROM expense e
+WHERE e.group_id = $1 AND e.status = $2
+ORDER BY e.created_at DESC
+LIMIT $4 OFFSET (($3 - 1) * $4)
+`
+
+type FetchGroupExpensesByStatusParams struct {
+	GroupID uuid.NullUUID
+	Status  string
+	Column3 interface{}
+	Limit   int32
+}
+
+func (q *Queries) FetchGroupExpensesByStatus(ctx context.Context, arg FetchGroupExpensesByStatusParams) ([]Expense, error) {
+	rows, err := q.db.QueryContext(ctx, fetchGroupExpensesByStatus,
+		arg.GroupID,
+		arg.Status,
+		arg.Column3,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Expense
+	for rows.Next() {
+		var i Expense
+		if err := rows.Scan(
+			&i.ID,
+			&i.Description,
+			&i.Amount,
+			&i.Split,
+			&i.Status,
+			&i.SettledBy,
+			&i.CreatedBy,
+			&i.Payee,
+			&i.GroupID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const fetchGroupMembers = `-- name: FetchGroupMembers :many
+SELECT u.id, u.name, u.email, u.is_verified, u.password, u.created_at, u.updated_at FROM "users" u
+JOIN group_members gm ON u.id = gm.user_id
+WHERE gm.group_id = $1
+`
+
+func (q *Queries) FetchGroupMembers(ctx context.Context, groupID uuid.UUID) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, fetchGroupMembers, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.IsVerified,
+			&i.Password,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -451,43 +546,6 @@ func (q *Queries) FetchUserById(ctx context.Context, id uuid.UUID) (User, error)
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const fetchUsersInGroup = `-- name: FetchUsersInGroup :many
-SELECT u.id, u.name, u.email, u.is_verified, u.password, u.created_at, u.updated_at FROM "users" u
-JOIN group_members gm ON u.id = gm.user_id
-WHERE gm.group_id = $1
-`
-
-func (q *Queries) FetchUsersInGroup(ctx context.Context, groupID uuid.UUID) ([]User, error) {
-	rows, err := q.db.QueryContext(ctx, fetchUsersInGroup, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []User
-	for rows.Next() {
-		var i User
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Email,
-			&i.IsVerified,
-			&i.Password,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getFriend = `-- name: GetFriend :one
@@ -621,24 +679,6 @@ func (q *Queries) RemoveFriend(ctx context.Context, arg RemoveFriendParams) (boo
 	return column_1, err
 }
 
-const removeUserFromExpense = `-- name: RemoveUserFromExpense :one
-DELETE FROM expense_mapping
-WHERE expense_id = $1 AND user_id = ANY($2::uuid[])
-RETURNING TRUE
-`
-
-type RemoveUserFromExpenseParams struct {
-	ExpenseID uuid.UUID
-	Column2   []uuid.UUID
-}
-
-func (q *Queries) RemoveUserFromExpense(ctx context.Context, arg RemoveUserFromExpenseParams) (bool, error) {
-	row := q.db.QueryRowContext(ctx, removeUserFromExpense, arg.ExpenseID, pq.Array(arg.Column2))
-	var column_1 bool
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const removeUserFromGroup = `-- name: RemoveUserFromGroup :one
 DELETE FROM group_members
 WHERE user_id = $1 AND group_id = $2
@@ -652,6 +692,24 @@ type RemoveUserFromGroupParams struct {
 
 func (q *Queries) RemoveUserFromGroup(ctx context.Context, arg RemoveUserFromGroupParams) (bool, error) {
 	row := q.db.QueryRowContext(ctx, removeUserFromGroup, arg.UserID, arg.GroupID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const removeUsersFromExpenseMapping = `-- name: RemoveUsersFromExpenseMapping :one
+DELETE FROM expense_mapping
+WHERE expense_id = $1 AND user_id = ANY($2::uuid[])
+RETURNING TRUE
+`
+
+type RemoveUsersFromExpenseMappingParams struct {
+	ExpenseID uuid.UUID
+	Column2   []uuid.UUID
+}
+
+func (q *Queries) RemoveUsersFromExpenseMapping(ctx context.Context, arg RemoveUsersFromExpenseMappingParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, removeUsersFromExpenseMapping, arg.ExpenseID, pq.Array(arg.Column2))
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err

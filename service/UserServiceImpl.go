@@ -130,7 +130,7 @@ func (u *UserServiceImpl) GetAssociatedUsers(groupId string) (*AssociatedUsers, 
 		return nil, err
 	}
 
-	users, err := u.storage.FetchUsersInGroup(groupId)
+	users, err := u.storage.FetchGroupMembers(groupId)
 	if err != nil {
 		return nil, err
 	}

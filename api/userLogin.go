@@ -64,21 +64,28 @@ func (a *AddFriendHandler) Method() Method {
 }
 
 func (a *AddFriendHandler) Path() string {
-	return Path("/friend/:id/add")
+	return Path("/friend/add")
 }
 
 func (a *AddFriendHandler) Handle(c *gin.Context, cfg *config.Config) {
-	friendId := c.Param("id")
+	type AddFriendRequest struct {
+		Email string `json:"email" binding:"required"`
+	}
+	var req AddFriendRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.AbortWithError(400, err)
+		return
+	}
 	userId, err := CtxGetUserId(c)
 	if err != nil {
 		c.AbortWithError(500, err)
 	}
 
-	ok, err := a.o.AddFriend(userId, friendId)
+	ok, err := a.o.AddFriend(userId, req.Email)
 	if err != nil || !ok {
 		c.AbortWithError(500, err)
 	}
-	c.Status(201)
+	c.JSON(201, gin.H{})
 
 }
 

@@ -19,7 +19,6 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/rs/zerolog"
-	"github.com/samber/lo"
 
 	sqldblogger "github.com/simukti/sqldb-logger"
 	"github.com/simukti/sqldb-logger/logadapter/zerologadapter"
@@ -165,9 +164,9 @@ func (d *DBStorage) FetchUserById(id string) (*models.User, error) {
 	}, nil
 }
 
-func (d *DBStorage) FetchUsersInGroup(groupId string) ([]models.User, error) {
+func (d *DBStorage) FetchGroupMembers(groupId string) ([]models.User, error) {
 	gid, _ := uuid.Parse(groupId)
-	users, err := d.queries.FetchUsersInGroup(*d.ctx, gid)
+	users, err := d.queries.FetchGroupMembers(*d.ctx, gid)
 	if err != nil {
 		return nil, err
 	}
@@ -205,9 +204,7 @@ func (d *DBStorage) FetchGroupExpenses(groupId string, pageNumber int) (*models.
 		Column2: pageNumber,
 		Limit:   20,
 	})
-	fmt.Println("rows: ", lo.Map(rows, func(r db.Expense, _ int) string {
-		return r.Status
-	}))
+
 	if err != nil {
 		return nil, err
 	}
@@ -217,28 +214,8 @@ func (d *DBStorage) FetchGroupExpenses(groupId string, pageNumber int) (*models.
 	pageSize := 20
 	totalPages := (totalCount + pageSize - 1) / pageSize
 
-	result := models.StoredGroupExpenseHistory{Expenses: []models.Expense{}, TotalPages: totalPages, PageNumber: pageNumber}
-	for _, row := range rows {
-		amount, _ := strconv.ParseFloat(row.Amount, 64)
-		var splitW models.SplitWrapper
-		_ = json.Unmarshal(row.Split, &splitW)
-		var payeeW models.PayerWrapper
-		_ = json.Unmarshal(row.Payee, &payeeW)
-		result.Expenses = append(result.Expenses, models.Expense{
-			ID:             row.ID.String(),
-			Description:    row.Description.String,
-			Amount:         amount,
-			Status:         models.ExpenseStatus(row.Status),
-			CreatedBy:      row.CreatedBy.UUID.String(),
-			SettledBy:      row.SettledBy.UUID.String(),
-			CreatedAt:      row.CreatedAt.Time,
-			SplitW:         splitW,
-			PayeeW:         payeeW,
-			IsGroupExpense: true,
-			GroupId:        groupId,
-		})
-	}
-	return &result, nil
+	return d.GetStoredGroupExpenseFromRows(rows, pageNumber, totalPages)
+
 }
 
 func (d *DBStorage) CreateOrUpdateGroup(group models.Group) (*models.Group, error) {
@@ -300,6 +277,17 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.Expense) (*models.Expen
 	if err != nil {
 		return nil, err
 	}
+
+	groupId := uuid.NullUUID{}
+	if expense.IsGroupExpense {
+		groupId_, err := uuid.Parse(expense.GroupId)
+		if err != nil {
+			return nil, err
+		}
+
+		groupId = uuid.NullUUID{UUID: groupId_, Valid: true}
+	}
+
 	now := time.Now()
 	amountStr := fmt.Sprintf("%f", expense.Amount)
 
@@ -329,10 +317,11 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.Expense) (*models.Expen
 		Split:       json.RawMessage(splitJson),
 		Status:      string(expense.Status),
 		SettledBy:   uuid.NullUUID{UUID: settledBy, Valid: expense.SettledBy != ""},
-		CreatedBy:   uuid.NullUUID{UUID: createdBy, Valid: expense.CreatedBy != ""},
+		CreatedBy:   createdBy,
 		Payee:       json.RawMessage(payeeJson),
 		CreatedAt:   sql.NullTime{Time: createdAt, Valid: true},
 		UpdatedAt:   sql.NullTime{Time: now, Valid: true},
+		GroupID:     groupId,
 	})
 	if err != nil {
 		return nil, err
@@ -357,15 +346,17 @@ func (d *DBStorage) CreateOrUpdateExpense(expense models.Expense) (*models.Expen
 	}
 
 	return &models.Expense{
-		ID:          e.ID.String(),
-		Description: e.Description.String,
-		Amount:      amount,
-		Status:      models.ExpenseStatus(e.Status),
-		CreatedBy:   e.CreatedBy.UUID.String(),
-		SettledBy:   settledBy_,
-		CreatedAt:   e.CreatedAt.Time,
-		PayeeW:      payeeW,
-		SplitW:      splitW,
+		ID:             e.ID.String(),
+		Description:    e.Description.String,
+		Amount:         amount,
+		Status:         models.ExpenseStatus(e.Status),
+		CreatedBy:      e.CreatedBy.String(),
+		SettledBy:      settledBy_,
+		CreatedAt:      e.CreatedAt.Time,
+		PayeeW:         payeeW,
+		SplitW:         splitW,
+		IsGroupExpense: e.GroupID.Valid,
+		GroupId:        e.GroupID.UUID.String(),
 	}, nil
 }
 
@@ -391,16 +382,19 @@ func (d *DBStorage) FetchExpense(id string) (*models.Expense, error) {
 		return nil, err
 	}
 	amount, _ := strconv.ParseFloat(e.Amount, 64)
+
 	return &models.Expense{
-		ID:          e.ID.String(),
-		Description: e.Description.String,
-		Amount:      amount,
-		Status:      models.ExpenseStatus(e.Status),
-		CreatedBy:   e.CreatedBy.UUID.String(),
-		SettledBy:   e.SettledBy.UUID.String(),
-		CreatedAt:   e.CreatedAt.Time,
-		PayeeW:      payeeW,
-		SplitW:      splitW,
+		ID:             e.ID.String(),
+		Description:    e.Description.String,
+		Amount:         amount,
+		Status:         models.ExpenseStatus(e.Status),
+		CreatedBy:      e.CreatedBy.String(),
+		SettledBy:      e.SettledBy.UUID.String(),
+		CreatedAt:      e.CreatedAt.Time,
+		PayeeW:         payeeW,
+		SplitW:         splitW,
+		IsGroupExpense: e.GroupID.Valid,
+		GroupId:        e.GroupID.UUID.String(),
 	}, nil
 }
 
@@ -419,29 +413,14 @@ func (d *DBStorage) AddExpenseMapping(expenseId string, userId string) (bool, er
 	return d.queries.AddUserExpenseMapping(*d.ctx, db.AddUserExpenseMappingParams{ExpenseID: eid, UserID: uid})
 }
 
-func (d *DBStorage) AttachExpenseToGroup(expenseId string, groupId string, users []string) (bool, error) {
-	eid, _ := uuid.Parse(expenseId)
-	gid, _ := uuid.Parse(groupId)
-	var userUUIDs []uuid.UUID
-	for _, u := range users {
-		uid, _ := uuid.Parse(u)
-		userUUIDs = append(userUUIDs, uid)
-	}
-	return d.queries.AttachExpenseToGroup(*d.ctx, db.AttachExpenseToGroupParams{
-		ExpenseID: eid,
-		GroupID:   uuid.NullUUID{UUID: gid, Valid: true},
-		Column3:   userUUIDs,
-	})
-}
-
-func (d *DBStorage) RemoveUserFromExpense(expenseId string, usersToRemove []string) (bool, error) {
+func (d *DBStorage) RemoveUsersFromExpense(expenseId string, usersToRemove []string) (bool, error) {
 	eid, _ := uuid.Parse(expenseId)
 	var userUUIDs []uuid.UUID
 	for _, u := range usersToRemove {
 		uid, _ := uuid.Parse(u)
 		userUUIDs = append(userUUIDs, uid)
 	}
-	return d.queries.RemoveUserFromExpense(*d.ctx, db.RemoveUserFromExpenseParams{
+	return d.queries.RemoveUsersFromExpenseMapping(*d.ctx, db.RemoveUsersFromExpenseMappingParams{
 		ExpenseID: eid,
 		Column2:   userUUIDs,
 	})
@@ -522,18 +501,6 @@ func (d *DBStorage) AddFriend(userId string, friendId string) (bool, error) {
 	return true, nil
 }
 
-func (d *DBStorage) FetchExpenseAssociatedGroup(expenseId string) (bool, string, error) {
-	expenseUUID, err := uuid.Parse(expenseId)
-	if err != nil {
-		return false, "", err
-	}
-	gID, err := d.queries.FetchExpenseAssociatedGroup(*d.ctx, expenseUUID)
-	if err != nil && err != sql.ErrNoRows {
-		return false, "", err
-	}
-	return err != sql.ErrNoRows, gID.UUID.String(), nil
-}
-
 func (d *DBStorage) FetchExpenseCountByGroup(groupId string) (int, error) {
 	gid, _ := uuid.Parse(groupId)
 	count, err := d.queries.FetchExpenseCountByGroup(*d.ctx, uuid.NullUUID{UUID: gid, Valid: true})
@@ -559,7 +526,19 @@ func (d *DBStorage) FetchExpenseByUserAndStatus(userId string, status models.Exp
 		return nil, err
 	}
 
-	result := models.StoredGroupExpenseHistory{Expenses: []models.Expense{}, PageNumber: pageNumber, TotalPages: 1}
+	totalCount, err := d.queries.FetchExpenseCountByUserAndStatus(*d.ctx, db.FetchExpenseCountByUserAndStatusParams{
+		UserID: uid,
+		Status: string(status),
+	})
+	totalPages := (int(totalCount) + int(limit) - 1) / int(limit)
+	if err != nil {
+		return nil, err
+	}
+	return d.GetStoredGroupExpenseFromRows(rows, pageNumber, int(totalPages))
+}
+
+func (d *DBStorage) GetStoredGroupExpenseFromRows(rows []db.Expense, pageNumber int, totalPages int) (*models.StoredGroupExpenseHistory, error) {
+	result := models.StoredGroupExpenseHistory{Expenses: []models.Expense{}, PageNumber: pageNumber, TotalPages: totalPages}
 	for _, row := range rows {
 		amount, _ := strconv.ParseFloat(row.Amount, 64)
 		var splitW models.SplitWrapper
@@ -571,14 +550,46 @@ func (d *DBStorage) FetchExpenseByUserAndStatus(userId string, status models.Exp
 			Description:    row.Description.String,
 			Amount:         amount,
 			Status:         models.ExpenseStatus(row.Status),
-			CreatedBy:      row.CreatedBy.UUID.String(),
+			CreatedBy:      row.CreatedBy.String(),
 			SettledBy:      row.SettledBy.UUID.String(),
 			CreatedAt:      row.CreatedAt.Time,
 			SplitW:         splitW,
 			PayeeW:         payeeW,
-			IsGroupExpense: false,
-			GroupId:        "",
+			IsGroupExpense: row.GroupID.Valid,
+			GroupId:        row.GroupID.UUID.String(),
 		})
 	}
 	return &result, nil
+}
+
+func (d *DBStorage) FetchGroupExpensesByStatus(groupId string, status models.ExpenseStatus, pageNumber int) (*models.StoredGroupExpenseHistory, error) {
+	if pageNumber == 0 {
+		pageNumber = 1
+	}
+	limit := 20
+
+	gid_, _ := uuid.Parse(groupId)
+	gid := uuid.NullUUID{UUID: gid_, Valid: true}
+
+	totalCount, err := d.queries.FetchExpenseCountByGroupAndStatus(*d.ctx, db.FetchExpenseCountByGroupAndStatusParams{
+		GroupID: gid,
+		Status:  string(status)},
+	)
+	totalPages := (int(totalCount) + limit - 1) / limit // Assuming page size is 20
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := d.queries.FetchGroupExpensesByStatus(*d.ctx, db.FetchGroupExpensesByStatusParams{
+		GroupID: gid,
+		Status:  string(status),
+		Column3: pageNumber,
+		Limit:   int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return d.GetStoredGroupExpenseFromRows(rows, pageNumber, int(totalPages))
+
 }

@@ -21,12 +21,10 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 	if err != nil {
 		return nil, errors.Join(errors.New("user trying to create expense does not exist"))
 	}
-	var groupID string
 
 	// validate group expense, check if group exists
 	if expenseCreate.IsGroupExpense {
-		group, err := e.storage.FetchGroupById(expenseCreate.GroupId)
-		groupID = group.Id
+		_, err := e.storage.FetchGroupById(expenseCreate.GroupId)
 		if err != nil {
 			return nil, err
 		}
@@ -54,20 +52,19 @@ func (e *ExpenseServiceImpl) CreateExpense(userId string, expenseCreate expense.
 
 	userIds := lodash.Union([]string{userId}, lodash.Keys(payeeMap), lodash.Keys(expenseCreate.PayeeW.Payer.GetPayers()))
 
-	if exp.IsGroupExpense {
+	if expenseCreate.IsGroupExpense {
+		for _, userId := range userIds {
 
-		_, err = e.storage.AttachExpenseToGroup(exp.ID, exp.GroupId, userIds)
-		if err != nil {
-			return nil, err
+			_, err := e.storage.AddExpenseMapping(expData.ID, userId)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	expData.GroupId = groupID
-	expData.IsGroupExpense = len(groupID) > 0
-
 	// TODO: CLOSE LOCK
+
 	return expData, nil
-	// return expense.ConvertExpenseToExpense(expData)
 }
 
 func (e *ExpenseServiceImpl) UpdateExpense(userId string, exp expense.Expense) (*expense.Expense, error) {
@@ -75,11 +72,6 @@ func (e *ExpenseServiceImpl) UpdateExpense(userId string, exp expense.Expense) (
 	if err != nil {
 		return nil, err
 	}
-
-	// existingExp, err := expense.ConvertExpenseToExpense(data)
-	// if err != nil {
-	// 	return nil, err
-	// }
 
 	if existingExp.CreatedAt != exp.CreatedAt || existingExp.CreatedBy != exp.CreatedBy {
 		return nil, errors.New("protected field change")
@@ -98,17 +90,15 @@ func (e *ExpenseServiceImpl) UpdateExpense(userId string, exp expense.Expense) (
 	// only remove users who are not borrower or payer
 	usersToRemove, _ := lodash.Difference(lodash.Union(removeB, payersToRemove), lodash.Union(newPayers, newB))
 
-	_, gID, err := e.storage.FetchExpenseAssociatedGroup(exp.ID)
-	if err != nil {
-		return nil, err
-	}
-	// add new users to expense
-	_, err = e.storage.AttachExpenseToGroup(exp.ID, gID, usersToAdd)
-	if err != nil {
-		return nil, err
+	// TODO: ADD LOCK
+	for _, userId := range usersToAdd {
+		_, err := e.storage.AddExpenseMapping(exp.ID, userId)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	_, err = e.storage.RemoveUserFromExpense(exp.ID, usersToRemove)
+	_, err = e.storage.RemoveUsersFromExpense(exp.ID, usersToRemove)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +107,8 @@ func (e *ExpenseServiceImpl) UpdateExpense(userId string, exp expense.Expense) (
 	if err != nil {
 		return nil, err
 	}
+
+	// REMOVE LOCK
 
 	return updatedExp, err
 }
@@ -130,7 +122,7 @@ func (e *ExpenseServiceImpl) DeleteExpense(userId string, expenseId string) (boo
 	userIds := lodash.Union(lodash.Keys(exp.PayeeW.Payer.GetPayers()), lodash.Keys(exp.SplitW.Split.GetPayeeSplit()))
 
 	// TODO: ADD LOCK
-	_, err = e.storage.RemoveUserFromExpense(exp.ID, userIds)
+	_, err = e.storage.RemoveUsersFromExpense(exp.ID, userIds)
 	if err != nil {
 		return false, err
 	}
@@ -152,27 +144,43 @@ func (e *ExpenseServiceImpl) SettleExpense(userId string, expenseId string) (*ex
 }
 
 func (e *ExpenseServiceImpl) FetchExpense(id string) (*expense.Expense, error) {
-
-	ok, gid, err := e.storage.FetchExpenseAssociatedGroup(id)
-	if err != nil {
-		return nil, err
-	}
-
-	exp, err := e.storage.FetchExpense(id)
-	if err != nil {
-		return nil, err
-	}
-
-	exp.IsGroupExpense = ok
-	exp.GroupId = gid
-
-	return exp, nil
+	return e.storage.FetchExpense(id)
 }
 
 func NewExpenseServiceImpl(storage expense.Storage) *ExpenseServiceImpl {
 	return &ExpenseServiceImpl{
 		storage: storage,
 	}
+}
+
+// TODO: have a thread to fetch in background, also use streams alternative for data processing
+func (e *ExpenseServiceImpl) CalculateUserRunningExpensesInGroup(userId string, group *expense.Group) (float64, float64, error) {
+	pageNumber := 1
+	totalPayed, totalBorrowed := 0.0, 0.0
+
+	for {
+		stored, err := e.storage.FetchGroupExpensesByStatus(group.Id, expense.ExpenseDraft, pageNumber)
+		if err != nil {
+			return 0, 0, err
+		}
+
+		for _, exp := range stored.Expenses {
+			payed := exp.PayeeW.Payer.GetPayers()[userId]
+			borrowed := exp.SplitW.Split.GetPayeeSplit()[userId]
+			if payed > borrowed {
+				totalPayed += payed - borrowed
+			} else if payed < borrowed {
+				totalBorrowed += borrowed - payed
+			}
+		}
+
+		if pageNumber >= stored.TotalPages {
+			break
+		}
+		pageNumber++
+	}
+
+	return totalPayed, totalBorrowed, nil
 }
 
 func (e *ExpenseServiceImpl) FetchExpenseByGroup(userId string, groupId string, pageNumber int) (*expense.GroupExpenseHistory, error) {
@@ -209,6 +217,35 @@ func (e *ExpenseServiceImpl) FetchExpenseCountByGroup(groupId string) (int, erro
 		return 0, err
 	}
 	return e.storage.FetchExpenseCountByGroup(groupId)
+}
+
+func (e *ExpenseServiceImpl) CalculateAllUserRunningExpenses(userId string) (float64, float64, error) {
+	pageNumber := 1
+	totalPayed, totalBorrowed := 0.0, 0.0
+
+	for {
+		stored, err := e.storage.FetchExpenseByUserAndStatus(userId, expense.ExpenseDraft, pageNumber, 100)
+		if err != nil {
+			return 0, 0, err
+		}
+
+		for _, exp := range stored.Expenses {
+			payed := exp.PayeeW.Payer.GetPayers()[userId]
+			borrowed := exp.SplitW.Split.GetPayeeSplit()[userId]
+			if payed > borrowed {
+				totalPayed += payed - borrowed
+			} else if payed < borrowed {
+				totalBorrowed += borrowed - payed
+			}
+		}
+
+		if pageNumber >= stored.TotalPages {
+			break
+		}
+		pageNumber++
+	}
+
+	return totalPayed, totalBorrowed, nil
 }
 
 func (e *ExpenseServiceImpl) FetchActiveUserExpenses(userId string, pageNumber int) (*expense.GroupExpenseHistory, error) {

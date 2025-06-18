@@ -58,10 +58,10 @@ func createUsers(t *testing.T) (string, expense.User, []expense.User, error) {
 	// primary user
 	// user := users[0]
 	user := expense.User{
-		Email:    "white-leaf@example.com",
+		Email:    "cold-pond@example.com",
 		Password: "Pass@12345",
-		Name:     "white-leaf",
-		ID:       "c76e7349-6495-4c3e-870b-903bc2559aef",
+		Name:     "cold-pond",
+		ID:       "992a2caf-0daa-47ad-bf89-6453b5f30fac",
 	}
 
 	t.Log("Primary User: ", user)

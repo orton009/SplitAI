@@ -41,6 +41,4 @@ context: current outstanding, only unsettled expenses.
 2. show current userLiability in specific group
 3. show totalExpense of the group (current outstanding, only unsettled expenses)
 4. show totalExpense of group by time period (month range, date range, year range)
-
-// under consideration
 5. show current userLiability across all groups, overall owed/borrowed

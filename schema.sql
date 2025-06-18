@@ -15,8 +15,7 @@ CREATE TABLE "group" (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     description TEXT NOT NULL,
-    admin_id UUID NOT NULL,
-    FOREIGN KEY (admin_id) REFERENCES "users"(id)
+    admin_id UUID NOT NULL
 );
 
 CREATE TABLE expense (
@@ -25,9 +24,10 @@ CREATE TABLE expense (
     amount DECIMAL(19, 4) NOT NULL,
     split JSONB NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('DRAFT', 'SETTLED', 'REOPENED')),
-    settled_by UUID REFERENCES "users"(id),
-    created_by UUID REFERENCES "users"(id),
+    settled_by UUID,
+    created_by UUID NOT NULL,
     payee JSONB NOT NULL,
+    group_id UUID,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() AT TIME ZONE 'Asia/Kolkata'),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() AT TIME ZONE 'Asia/Kolkata')
 );
@@ -38,24 +38,23 @@ CREATE INDEX idx_expense_status ON expense(status);
 -- Index for creator lookup
 CREATE INDEX idx_expense_created_by ON expense(created_by);
 
+-- Index for group-based expense queries
+CREATE INDEX idx_expense_group ON expense(group_id);
+
 CREATE TABLE expense_mapping (
-    expense_id UUID NOT NULL REFERENCES expense(id),
-    group_id UUID REFERENCES "group"(id),
-    user_id UUID NOT NULL REFERENCES "users"(id),
+    expense_id UUID NOT NULL,
+    user_id UUID NOT NULL,
     PRIMARY KEY (expense_id, user_id)
 );
 
-CREATE INDEX idx_expense_mapping_group ON expense_mapping(group_id);
 
 -- Index for fetching all expenses of a users
 CREATE INDEX idx_expense_mapping_user ON expense_mapping(user_id);
 
--- Composite Index for users+group queries 
-CREATE INDEX idx_expense_mapping_user_group ON expense_mapping(user_id, group_id);
 
 CREATE TABLE group_members (
-    user_id UUID NOT NULL REFERENCES "users"(id),
-    group_id UUID NOT NULL REFERENCES "group"(id),
+    user_id UUID NOT NULL,
+    group_id UUID NOT NULL,
     PRIMARY KEY (user_id, group_id)
 );
 
@@ -64,9 +63,7 @@ CREATE TABLE friends (
     user_id UUID NOT NULL,
     friend_id UUID NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, friend_id),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE
+    PRIMARY KEY (user_id, friend_id)
 );
 
 -- Index for efficient searching

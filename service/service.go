@@ -60,5 +60,7 @@ type ExpenseService interface {
 	FetchExpenseByGroup(userId string, groupId string, pageNumber int) (*expense.GroupExpenseHistory, error)
 	FetchExpenseCountByGroup(groupId string) (int, error)
 	FetchActiveUserExpenses(userId string, pageNumber int) (*expense.GroupExpenseHistory, error)
+	CalculateUserRunningExpensesInGroup(userId string, group *expense.Group) (float64, float64, error)
+	CalculateAllUserRunningExpenses(userId string) (float64, float64, error)
 	// GetExpenseHistory(id string) (*expense.ExpenseHistory, error)
 }

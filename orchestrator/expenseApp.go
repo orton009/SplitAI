@@ -44,13 +44,18 @@ func (e *ExpenseAppImpl) UserSignup(name, email, password string) (*expense.User
 	}
 }
 
-func (e *ExpenseAppImpl) AddFriend(userId, friendId string) (bool, error) {
-	validator := NewValidator().NonEmptyID(userId).NonEmptyID(userId)
+func (e *ExpenseAppImpl) AddFriend(userId, friendEmail string) (bool, error) {
+	validator := NewValidator().NonEmptyID(userId).Email(friendEmail)
 	if !validator.Ok() {
 		return false, validator.Err()
 	}
 
-	ok, err := e.userService.AddFriend(userId, friendId)
+	friend, err := e.userService.FetchUserCredentials(friendEmail)
+	if err != nil {
+		return false, expense.ErrService(err.Error())
+	}
+
+	ok, err := e.userService.AddFriend(userId, friend.ID)
 	if err != nil {
 		return false, expense.ErrService(err.Error())
 	}
@@ -152,6 +157,10 @@ func (e *ExpenseAppImpl) UpdateExpense(userId string, exp expense.Expense) (*exp
 
 	if existingExp.Status != expense.ExpenseDraft {
 		return nil, expense.ErrValidation("expense is not in draft state, cannot update")
+	}
+
+	if existingExp.GroupId != exp.GroupId {
+		return nil, expense.ErrValidation("expense group id cannot be changed")
 	}
 
 	// check is user is allowed to update expense
@@ -257,7 +266,13 @@ func (e *ExpenseAppImpl) GetUserHome(userId string) (service.UserHome, error) {
 		if err != nil {
 			return home, err
 		}
-		totalOwed, totalBorrowed := calculateUserLiability(exp)
+
+		// TODO: move to different API, lot of db calls
+		totalOwed, totalBorrowed, err := e.expenseService.CalculateUserRunningExpensesInGroup(userId, &group)
+		if err != nil {
+			return home, err
+		}
+
 		expGroups = append(expGroups, service.GroupWithExpense{
 			Group:          group,
 			ExpenseHistory: *exp,
@@ -266,12 +281,6 @@ func (e *ExpenseAppImpl) GetUserHome(userId string) (service.UserHome, error) {
 		})
 
 	}
-
-	// userExp, err := e.expenseService.FetchActiveUserExpenses(userId, 0)
-	// if err != nil {
-	// 	return home, err
-	// }
-	// userTotalOwed, userTotalBorrowed := calculateUserLiability(userExp)
 
 	return service.UserHome{AssociatedGroups: expGroups, User: *user}, nil
 }
@@ -284,7 +293,10 @@ func (e *ExpenseAppImpl) GetUserExpenseHistory(userId string, pageNumber int) (*
 		return nil, err
 	}
 
-	totalOwed, totalBorrowed := calculateUserLiability(expHistory)
+	totalOwed, totalBorrowed, err := e.expenseService.CalculateAllUserRunningExpenses(userId)
+	if err != nil {
+		return nil, expense.ErrService(err.Error())
+	}
 
 	history := service.UserExpenses{
 		Expenses:      expHistory.Expenses,
@@ -315,7 +327,10 @@ func (e *ExpenseAppImpl) GetGroupDetail(userId string, groupId string) (service.
 		return detail, err
 	}
 
-	totalOwed, totalBorrowed := calculateUserLiability(expHistory)
+	totalOwed, totalBorrowed, err := e.expenseService.CalculateUserRunningExpensesInGroup(userId, group)
+	if err != nil {
+		return detail, err
+	}
 
 	detail = service.GroupDetail{
 		Group: service.GroupWithExpense{

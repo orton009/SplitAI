@@ -18,15 +18,15 @@ type Expense struct {
 	Split       json.RawMessage
 	Status      string
 	SettledBy   uuid.NullUUID
-	CreatedBy   uuid.NullUUID
+	CreatedBy   uuid.UUID
 	Payee       json.RawMessage
+	GroupID     uuid.NullUUID
 	CreatedAt   sql.NullTime
 	UpdatedAt   sql.NullTime
 }
 
 type ExpenseMapping struct {
 	ExpenseID uuid.UUID
-	GroupID   uuid.NullUUID
 	UserID    uuid.UUID
 }
 
