@@ -38,16 +38,18 @@ func NewPostgresDB(cfg *config.Config) (*sql.DB, error) {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
 		fmt.Println("using local postgres connection....")
+		url = dsn
 	}
 	db, err := sql.Open("postgres", url)
 	if err != nil {
 		log.Fatal("failed to establish db connection: ", err)
+		return nil, err
 	}
 
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger().Output(zerolog.ConsoleWriter{Out: os.Stdout})
 
 	loggerAdapter := zerologadapter.New(logger)
-	db = sqldblogger.OpenDriver(dsn, db.Driver(), loggerAdapter /*, using_default_options*/) // db is STILL *sql.DB
+	db = sqldblogger.OpenDriver(url, db.Driver(), loggerAdapter /*, using_default_options*/) // db is STILL *sql.DB
 	return db, err
 }
 
