@@ -42,7 +42,7 @@ func (h *JoinGroupRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 	}
 
 	// response
-	c.Status(201)
+	c.JSON(201, gin.H{})
 }
 
 // RouteHandler implementation for CreateGroup

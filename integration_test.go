@@ -58,10 +58,10 @@ func createUsers(t *testing.T) (string, expense.User, []expense.User, error) {
 	// primary user
 	// user := users[0]
 	user := expense.User{
-		Email:    "cold-pond@example.com",
+		Email:    "red-water@example.com",
 		Password: "Pass@12345",
-		Name:     "cold-pond",
-		ID:       "992a2caf-0daa-47ad-bf89-6453b5f30fac",
+		Name:     "red-water",
+		ID:       "4b5aba65-a8ef-4587-90dd-3f8ebf826f6b",
 	}
 
 	t.Log("Primary User: ", user)
@@ -88,7 +88,7 @@ func createUsers(t *testing.T) (string, expense.User, []expense.User, error) {
 	// friends := lo.Slice(users, 1, len(users))
 	friends := users
 	for _, friend := range friends {
-		cmd := Curl("/friend/"+friend.ID+"/add", "", apiServer.PUT, token)
+		cmd := Curl("/friend/add", fmt.Sprintf(`{"email": "%s"}`, friend.Email), apiServer.PUT, token)
 		_, err := runCommand(t, cmd, "Add friend")
 		if err != nil {
 			t.Error(err)

@@ -101,7 +101,7 @@ func (d *DeleteExpenseRouteHandler) Handle(c *gin.Context, cfg *config.Config) {
 		return
 	}
 
-	c.Status(201)
+	c.JSON(201, gin.H{})
 }
 
 type SettleExpenseHandler struct {
@@ -129,7 +129,7 @@ func (h *SettleExpenseHandler) Handle(c *gin.Context, cfg *config.Config) {
 		return
 	}
 
-	c.Status(201)
+	c.JSON(201, gin.H{})
 }
 
 type UserExpensesHandler struct {
