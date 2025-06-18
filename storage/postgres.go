@@ -35,7 +35,10 @@ func NewPostgresDB(cfg *config.Config) (*sql.DB, error) {
 		cfg.DatabaseName,
 		cfg.DatabaseSSLMode,
 	)
-	url := "${{ Postgres.DATABASE_URL }}"
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		fmt.Println("using local postgres connection....")
+	}
 	db, err := sql.Open("postgres", url)
 	if err != nil {
 		log.Fatal("failed to establish db connection: ", err)

@@ -13,7 +13,7 @@ import (
 	"github.com/goombaio/namegenerator"
 )
 
-const HOST = "http://localhost:8888/v1"
+const HOST = "https://perceptive-abundance-production.up.railway.app/v1"
 const NumUsers = 3
 
 func runCommand(t *testing.T, cmd string, cmdName string) ([]byte, error) {
